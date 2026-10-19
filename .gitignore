@@ -1,0 +1,21 @@
+# 本地配置/生产密钥
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+*.jks
+secrets/
+private-data/
+production-data/
+*.sqlite
+*.sqlite3
+*.db
+node_modules/
+dist/
+build/
+.DS_Store

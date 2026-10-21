@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>校园快取通 · 本地业务测试</title>
   <link rel="stylesheet" href="/style.css">
-  <script src="/app.js" defer></script>
+  <link rel="stylesheet" href="/form.css">
+  <script type="module" src="/app.js"></script>
 </head>
 <body>
-  <header><div class="shell top"><div><strong class="brand">📦 校园快取通</strong><span class="version">V0.3 本地业务测试</span></div><span class="pill">真实下单与支付已关闭</span></div></header>
+  <header><div class="shell top"><div><strong class="brand">📦 校园快取通</strong><span class="version">V0.3.1 本地业务测试</span></div><span class="pill">真实下单与支付已关闭</span></div></header>
   <main class="shell">
     <section class="notice"><strong>仅使用虚构数据。</strong>测试身份可直接切换，没有真实登录；请勿填写真实取件码、姓名、电话或宿舍房间。网页只连接本机服务。</section>
     <section class="panel identity"><div><h1>双校区业务控制台</h1><p>选择测试身份，查看不同角色实际能执行的操作。</p></div><label>测试身份<select id="account"></select></label><button id="login">进入演示</button></section>
@@ -19,10 +20,12 @@
         <h2>创建测试订单</h2><p>费用由服务端计算，付款状态始终为“未支付演示”。</p>
         <form id="order-form" class="form-grid">
           <label>校区<input id="campus" readonly></label>
-          <label>虚构测试点<select id="station"></select></label>
-          <label>宿舍苑区<select id="zone"></select></label>
-          <label>楼下交接点<input id="handoff" required maxlength="60" placeholder="例：东苑楼下测试点"></label>
-          <label>虚构取件码<input id="pickup-code" required pattern="TEST-[A-Z0-9]{4,12}" placeholder="TEST-1234"></label>
+          <!-- Pickup and delivery fields adapted from coderwyx's MIT-licensed order form; see docs/THIRD_PARTY_NOTICES.md. -->
+          <label>从哪里取？<select id="station"></select></label>
+          <label>送到哪个宿舍苑区？<select id="zone"></select></label>
+          <div class="handoff-box"><strong>在哪里把包裹交给你？</strong><p>这里指代取员把包裹送来后，与你当面交接的位置；不是取快递的驿站，也不需要填写宿舍房间号。</p><span id="handoff-preview"></span></div>
+          <label>虚构取件码<input id="pickup-code" required maxlength="17" placeholder="如 TEST-5-2-0042" list="pickup-examples" autocomplete="off" spellcheck="false"><small>可试：TEST-123456、TEST-5-2-0042、TEST-9VK518。请勿填真实码。</small></label>
+          <datalist id="pickup-examples"><option value="TEST-123456"><option value="TEST-5-2-0042"><option value="TEST-9VK518"></datalist>
           <label>件数<select id="qty"><option value="1">1 件</option><option value="2">2 件</option><option value="3">3 件</option></select></label>
           <label>规格<select id="size"><option value="small">普通件</option><option value="large">大件</option></select></label>
           <label>时效<select id="speed"><option value="normal">普通</option><option value="urgent">加急</option></select></label>

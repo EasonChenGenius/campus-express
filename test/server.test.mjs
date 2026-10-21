@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../server/index.mjs';
+import { parseDemoPickupCode } from '../web/pickup-code.js';
 
 async function setup(t) {
   const app = createApp({ dbPath: ':memory:' });
@@ -12,7 +13,7 @@ async function setup(t) {
     return { status: response.status, body: await response.json() };
   };
   const login = async accountId => (await request('/api/demo/login', null, 'POST', { accountId })).body.token;
-  const orderBody = (overrides = {}) => ({ requestId: crypto.randomUUID(), campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', handoff: '东苑楼下测试点', pickupCode: 'TEST-1234', qty: 1, size: 'small', speed: 'normal', slot: 'today-evening', ...overrides });
+  const orderBody = (overrides = {}) => ({ requestId: crypto.randomUUID(), campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', pickupCode: 'TEST-1234', qty: 1, size: 'small', speed: 'normal', slot: 'today-evening', ...overrides });
   return { request, login, orderBody };
 }
 
@@ -52,7 +53,7 @@ test('20 个接单请求只有一次成功，状态流转与审计记录正确',
   assert.equal((await request(`/api/orders/${order.id}/assign`, admin, 'POST', { courierId: 'runner-cl-1' })).status, 409);
   const accepted = (await request(`/api/orders/${order.id}`, courier)).body;
   assert.equal(accepted.pickup_code, 'TEST-1234');
-  assert.equal(accepted.handoff, '东苑楼下测试点');
+  assert.equal(accepted.handoff, '东苑楼下公共入口（测试）');
   assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status: 'delivered' })).status, 409);
   for (const status of ['picked', 'delivering', 'delivered']) assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status })).status, 200);
   assert.equal((await request(`/api/orders/${order.id}/confirm`, student, 'POST')).body.status, 'completed');
@@ -74,4 +75,19 @@ test('跨校区派单和真实数据输入被拒绝，学生可取消待接单',
   assert.equal((await request(`/api/orders/${order.id}/cancel`, student, 'POST')).body.status, 'cancelled');
   assert.equal((await request(`/api/orders/${order.id}/assign`, admin, 'POST', { courierId: 'runner-cl-1' })).status, 409);
   assert.equal((await request('/api/capabilities', null)).body.realPayment, false);
+});
+
+test('取件码识别常见形态但只接受虚构测试码', async t => {
+  const { request, login, orderBody } = await setup(t);
+  const student = await login('student-a');
+  for (const [code, kind] of [['TEST-123456', 'digits'], ['TEST-5-2-0042', 'shelf'], ['test-9vk518', 'mixed']]) {
+    assert.equal(parseDemoPickupCode(code).kind, kind);
+    const created = await request('/api/orders', student, 'POST', orderBody({ pickupCode: code }));
+    assert.equal(created.status, 201);
+    assert.equal(created.body.pickup_code, code.toUpperCase());
+  }
+  for (const code of ['5-2-0042', '9VK518', 'TEST-', 'TEST-5-2-42', 'TEST-HELLO']) {
+    assert.equal(parseDemoPickupCode(code), null);
+    assert.equal((await request('/api/orders', student, 'POST', orderBody({ pickupCode: code }))).status, 400);
+  }
 });

@@ -1,3 +1,5 @@
+import { parseDemoPickupCode } from './pickup-code.js';
+
 const $ = id => document.getElementById(id);
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const campusName = { chenglong: '成龙校区', shizishan: '狮子山校区' };
@@ -46,7 +48,7 @@ function orderActions(o) {
   return '';
 }
 function orderCard(o) {
-  const privateDetails = o.handoff ? `<p>楼下交接点：${escapeHtml(o.handoff)}</p>` : '<p>接单后可查看楼下交接点</p>';
+  const privateDetails = o.handoff ? `<p>当面交接位置：${escapeHtml(o.handoff)}</p>` : '<p>接单后可查看当面交接位置</p>';
   const code = o.pickup_code ? `<p>虚构取件码：<strong>${escapeHtml(o.pickup_code)}</strong></p>` : '';
   return `<article class="card"><div class="card-head"><strong>📦 ${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)}</strong><span class="tag">${escapeHtml(statusName[o.status] || o.status)}</span></div>
     <p>测试点：${escapeHtml(catalog.stations.find(s => s.id === o.station_id)?.name || o.station_id)} · ${o.qty} 件 · ${escapeHtml(o.slot === 'today-evening' ? '今日傍晚' : '明日中午')}</p>${privateDetails}${code}
@@ -63,6 +65,7 @@ async function refresh() {
     const previous = $('zone').value;
     $('zone').innerHTML = catalog.campusZones[me.campus].map(z => `<option value="${escapeHtml(z)}">${escapeHtml(z)}</option>`).join('');
     if (catalog.campusZones[me.campus].includes(previous)) $('zone').value = previous;
+    updateHandoffPreview();
   }
   if (['admin', 'manager'].includes(me.role)) {
     couriers = await api('/api/couriers');
@@ -75,7 +78,9 @@ async function refresh() {
 }
 async function createOrder(event) {
   event.preventDefault();
-  const body = { requestId: crypto.randomUUID(), campus: me.campus, stationId: $('station').value, zone: $('zone').value, handoff: $('handoff').value.trim(), pickupCode: $('pickup-code').value.trim().toUpperCase(), qty: Number($('qty').value), size: $('size').value, speed: $('speed').value, slot: $('slot').value };
+  const code = parseDemoPickupCode($('pickup-code').value);
+  if (!code) return message('请输入虚构测试码，例如 TEST-123456、TEST-5-2-0042 或 TEST-9VK518', true);
+  const body = { requestId: crypto.randomUUID(), campus: me.campus, stationId: $('station').value, zone: $('zone').value, pickupCode: code.value, qty: Number($('qty').value), size: $('size').value, speed: $('speed').value, slot: $('slot').value };
   await perform(async () => { await api('/api/orders', { method: 'POST', body: JSON.stringify(body) }); $('order-form').reset(); }, '测试订单已创建；没有付款或真实配送');
 }
 async function handleClick(event) {
@@ -97,6 +102,11 @@ async function init() {
   $('login').addEventListener('click', login);
   $('refresh').addEventListener('click', () => perform(refresh, '数据已刷新'));
   $('order-form').addEventListener('submit', createOrder);
+  $('zone').addEventListener('change', updateHandoffPreview);
   $('workspace').addEventListener('click', handleClick);
 }
 init();
+
+function updateHandoffPreview() {
+  $('handoff-preview').textContent = `${$('zone').value}楼下公共入口（测试）`;
+}

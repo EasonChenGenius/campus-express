@@ -1,0 +1,4 @@
+.handoff-box{grid-column:1/-1;background:#edf7ff;border:1px solid #c6dfef;border-radius:12px;padding:14px 16px;color:#24506f}
+.handoff-box p{margin:6px 0 10px}
+.handoff-box span{display:inline-block;background:white;border-radius:8px;padding:8px 11px;font-weight:700}
+.form-grid label small{font-weight:400;color:#61788e;line-height:1.5}

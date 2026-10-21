@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import { parseDemoPickupCode } from '../web/pickup-code.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const campusZones = {
@@ -87,13 +88,13 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
     try {
       const url = new URL(req.url, 'http://localhost');
       if (!url.pathname.startsWith('/api/')) {
-        if (req.method !== 'GET' || !['/', '/app.js', '/style.css'].includes(url.pathname)) fail(404, '页面不存在');
+        if (req.method !== 'GET' || !['/', '/app.js', '/style.css', '/form.css', '/pickup-code.js'].includes(url.pathname)) fail(404, '页面不存在');
         const path = join(root, 'web', url.pathname === '/' ? 'index.html' : url.pathname.slice(1));
         const content = await readFile(path);
         res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/html; charset=utf-8', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });
         res.end(content); return;
       }
-      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.3.0', mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false });
+      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.3.1', mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false });
       if (req.method === 'GET' && url.pathname === '/api/demo/accounts') return send(res, 200, fixtures.map(([id, name, role, campus]) => ({ id, name, role, campus })));
       if (req.method === 'POST' && url.pathname === '/api/demo/login') {
         const { accountId } = await bodyOf(req);
@@ -128,11 +129,13 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         if (!station || b.campus !== user.campus || !campusZones[user.campus].includes(b.zone)) fail(400, '校区、苑区或测试站点无效');
         if (!Number.isInteger(b.qty) || b.qty < 1 || b.qty > 3 || !['small', 'large'].includes(b.size) || !['normal', 'urgent'].includes(b.speed)) fail(400, '包裹参数无效');
         if (!['today-evening', 'tomorrow-noon'].includes(b.slot)) fail(400, '预约时段无效');
-        if (typeof b.handoff !== 'string' || b.handoff.length < 2 || b.handoff.length > 60 || !b.handoff.includes(b.zone) || !b.handoff.includes('测试') || /1[3-9]\d{9}|\d{2,4}[- ]?\d{6,8}/.test(b.handoff)) fail(400, '交接点只允许本苑区楼下的虚构测试位置');
-        if (typeof b.pickupCode !== 'string' || !/^TEST-[A-Z0-9]{4,12}$/.test(b.pickupCode)) fail(400, '只允许 TEST- 开头的虚构取件码');
+        if (Object.hasOwn(b, 'handoff')) fail(400, '见面位置由宿舍苑区自动确定，无需填写地址');
+        const handoff = `${b.zone}楼下公共入口（测试）`;
+        const pickupCode = parseDemoPickupCode(b.pickupCode);
+        if (!pickupCode) fail(400, '仅接受 TEST- 开头的虚构码：数字码、货架-层-末四位或字母数字码');
         const id = randomUUID(), at = now(), amount = (b.size === 'large' ? 500 : 300) + (b.qty - 1) * 100 + (b.speed === 'urgent' ? 200 : 0);
         db.prepare(`INSERT INTO orders (id,request_id,student_id,campus,station_id,zone,handoff,pickup_code,qty,size,speed,slot,amount_cents,payment_status,status,courier_id,created_at,updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'demo_not_paid','pending',NULL,?,?)`).run(id,b.requestId,user.id,user.campus,station.id,b.zone,b.handoff,b.pickupCode,b.qty,b.size,b.speed,b.slot,amount,at,at);
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'demo_not_paid','pending',NULL,?,?)`).run(id,b.requestId,user.id,user.campus,station.id,b.zone,handoff,pickupCode.value,b.qty,b.size,b.speed,b.slot,amount,at,at);
         audit(user.id, 'demo_order_created', id);
         return send(res, 201, view(getOrder(id), user));
       }
@@ -210,5 +213,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const { port = 3000, host = '127.0.0.1' } = { port: Number(process.env.PORT || 3000) };
   if (host !== '127.0.0.1') throw Error('本地演示仅允许 127.0.0.1');
   await mkdir(join(root, 'data'), { recursive: true });
-  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.3 本地演示：http://${host}:${port}`));
+  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.3.1 本地演示：http://${host}:${port}`));
 }

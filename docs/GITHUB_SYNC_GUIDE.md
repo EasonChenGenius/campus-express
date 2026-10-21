@@ -9,6 +9,10 @@
 - 2026-10-19 实测：Base44 `list_directory` 返回 `PREMIUM_REQUIRED`，明确提示直接访问源码的 sandbox-bridge 需要 Builder 或以上套餐。浏览器打开编辑器后需 Google 通行密钥验证，尚未进入 GitHub 同步设置；因此**未配置、未验证源码同步**。
 - 已建立 `https://github.com/EasonChenGenius/campus-express` 私有仓库。仓库中的文件是本地 V0.2 归档，不是 Base44 自动导出的源码。
 
+## 2026-10-21 决策与持续维护
+
+项目负责人选择**暂不升级 Base44**，但继续更新 GitHub。已设置每日检查：只对本地 V0.2 演示、文档和配置的真实、安全变更更新本私有仓库；无变更不提交。这个流程不能获取 Base44 免费套餐下受限的在线源码，也不会自动捕获在 Base44 编辑器里做的修改。若在线应用有变化，须另外提供可审查的内容或日后取得源码访问能力，再决定如何并入仓库。不得把手动归档称为 2-Way Sync。
+
 ## 自动同步推荐做法（真正的 Base44 源码）
 
 1. 由账号持有人完成 Base44 浏览器登录的通行密钥验证，再打开编辑器：<https://app.base44.com/apps/6ad5df9cb5d27854baffa1a7/editor/preview>。

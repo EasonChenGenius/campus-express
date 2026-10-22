@@ -1,0 +1,40 @@
+<view class="page">
+  <view class="banner">本机演示 · 虚构站点与取件码 · 未付款 · 不进行真实配送</view>
+  <view class="row"><view class="title">新建测试订单</view><text class="pill">{{campusName}}</text></view>
+  <view class="nav">
+    <button class="button button-secondary" bindtap="openOrders">我的订单</button>
+    <button class="button button-secondary" bindtap="switchAccount">切换测试身份</button>
+  </view>
+  <view class="card">
+    <view class="field"><text class="label">测试取件点</text>
+      <picker range="{{stations}}" range-key="name" value="{{stationIndex}}" data-field="stationIndex" bindchange="changePicker">
+        <view class="control">{{stations.length ? stations[stationIndex].name : '暂无测试站点'}}</view>
+      </picker>
+    </view>
+    <view class="field"><text class="label">宿舍苑区</text>
+      <picker range="{{zones}}" value="{{zoneIndex}}" data-field="zoneIndex" bindchange="changePicker">
+        <view class="control">{{zones.length ? zones[zoneIndex] : '暂无苑区'}}</view>
+      </picker>
+    </view>
+    <view class="muted">当面交接点：{{handoff}}</view>
+    <view class="field"><text class="label">虚构取件码</text>
+      <input class="control" value="{{pickupCode}}" placeholder="例如 TEST-123456" maxlength="24" bindinput="changeCode"/>
+    </view>
+    <view class="field"><text class="label">包裹件数</text>
+      <picker range="{{qtyOptions}}" value="{{qtyIndex}}" data-field="qtyIndex" bindchange="changePicker"><view class="control">{{qtyOptions[qtyIndex]}} 件</view></picker>
+    </view>
+    <view class="field"><text class="label">包裹大小</text>
+      <picker range="{{sizeOptions}}" value="{{sizeIndex}}" data-field="sizeIndex" bindchange="changePicker"><view class="control">{{sizeOptions[sizeIndex]}}</view></picker>
+    </view>
+    <view class="field"><text class="label">配送速度</text>
+      <picker range="{{speedOptions}}" value="{{speedIndex}}" data-field="speedIndex" bindchange="changePicker"><view class="control">{{speedOptions[speedIndex]}}</view></picker>
+    </view>
+    <view class="field"><text class="label">预约时段</text>
+      <picker range="{{slotOptions}}" value="{{slotIndex}}" data-field="slotIndex" bindchange="changePicker"><view class="control">{{slotOptions[slotIndex]}}</view></picker>
+    </view>
+    <view class="notice" wx:if="{{pendingHint}}">上次提交结果未确认。保持表单内容不变重试，系统会使用同一请求编号。</view>
+    <view class="error" wx:if="{{error}}">{{error}}</view>
+    <button class="button" disabled="{{busy || !stations.length}}" bindtap="submit">{{busy ? '提交中…' : '创建测试订单'}}</button>
+    <view class="muted">模拟报价由服务器生成；此处不会收费。</view>
+  </view>
+</view>

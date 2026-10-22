@@ -11,7 +11,7 @@ a{color:inherit}
 .site-header{background:#143b33;color:#fff}
 .topbar{min-height:78px;display:flex;align-items:center;justify-content:space-between;gap:20px}
 .brand-lockup{display:flex;align-items:center;gap:13px}
-.brand-mark{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:#d9ed9a;color:#173a30;font-size:23px;font-weight:900;box-shadow:0 5px 0 #86a856}
+.brand-mark{width:52px;height:52px;flex:none;border-radius:50%;background:#fff url('./assets/sichuan-normal-university-logos.png') center center / 155px 52px no-repeat;box-shadow:0 0 0 2px #fff,0 4px 12px #071f1a44}
 .brand-lockup strong,.brand-lockup small{display:block}
 .brand-lockup strong{font-size:19px;letter-spacing:.02em}
 .brand-lockup small{font-size:10px;letter-spacing:.16em;color:#accbc0;margin-top:4px}

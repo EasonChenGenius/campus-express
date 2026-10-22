@@ -2,6 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../server/index.mjs';
 import { parseDemoPickupCode } from '../web/pickup-code.js';
+import { availableSlots } from '../server/slots.mjs';
+
+test('预约仅开放白天到傍晚的一小时时段，过期和夜间不可提交', async t => {
+  const { request, login, orderBody } = await setup(t);
+  const student = await login('student-a');
+  const catalog = await request('/api/catalog', student);
+  assert.ok(catalog.body.slots.length > 0);
+  assert.ok(catalog.body.slots.every(s => /T(09|1[0-8]):00:00\+08:00$/.test(s.value)));
+  assert.ok(catalog.body.slots.every(s => Date.parse(s.value) > Date.now()));
+  assert.equal((await request('/api/orders', student, 'POST', orderBody({ slot: catalog.body.slots[0].value }))).status, 201);
+  for (const slot of ['today-evening', '2026-10-23T22:00:00+08:00', '2020-01-01T09:00:00+08:00']) {
+    assert.equal((await request('/api/orders', student, 'POST', orderBody({ slot }))).status, 400);
+  }
+});
 
 async function setup(t) {
   const app = createApp({ dbPath: ':memory:' });
@@ -13,7 +27,7 @@ async function setup(t) {
     return { status: response.status, body: await response.json() };
   };
   const login = async accountId => (await request('/api/demo/login', null, 'POST', { accountId })).body.token;
-  const orderBody = (overrides = {}) => ({ requestId: crypto.randomUUID(), campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', pickupCode: 'TEST-1234', qty: 1, size: 'small', speed: 'normal', slot: 'today-evening', ...overrides });
+  const orderBody = (overrides = {}) => ({ requestId: crypto.randomUUID(), campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', pickupCode: 'TEST-1234', qty: 1, size: 'small', speed: 'normal', slot: availableSlots()[0].value, ...overrides });
   return { request, login, orderBody };
 }
 
@@ -107,8 +121,8 @@ test('相同请求编号只重试同一订单内容，错误响应提供稳定�
   assert.equal(unauthorized.status, 401);
   assert.equal(unauthorized.body.code, 'UNAUTHORIZED');
   const capabilities = await request('/api/capabilities');
-  assert.equal(capabilities.body.version, '0.4.1');
-  assert.equal(capabilities.body.apiContract, 1);
+  assert.equal(capabilities.body.version, '0.4.2');
+  assert.equal(capabilities.body.apiContract, 2);
   assert.equal(capabilities.body.closedPilotReady, false);
 });
 

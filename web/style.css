@@ -1,4 +1,4 @@
-:root{font-family:Inter,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:#18362f;background:#f7f8f4;font-synthesis:none}
+:root{font-family:Inter,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:#283b35;background:#f5f4f0;font-synthesis:none}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{scroll-behavior:smooth}
@@ -8,27 +8,27 @@ button{cursor:pointer}
 button:disabled{opacity:.55;cursor:not-allowed}
 a{color:inherit}
 .shell{width:min(1160px,calc(100% - 48px));margin-inline:auto}
-.site-header{background:#143b33;color:#fff}
+.site-header{background:#f8f7f3;color:#283b35;border-bottom:1px solid #dce4de}
 .topbar{min-height:78px;display:flex;align-items:center;justify-content:space-between;gap:20px}
 .brand-lockup{display:flex;align-items:center;gap:13px}
 .brand-mark{width:52px;height:52px;flex:none;border-radius:50%;background:#fff url('./assets/sichuan-normal-university-logos.png') center center / 155px 52px no-repeat;box-shadow:0 0 0 2px #fff,0 4px 12px #071f1a44}
 .brand-lockup strong,.brand-lockup small{display:block}
 .brand-lockup strong{font-size:19px;letter-spacing:.02em}
-.brand-lockup small{font-size:10px;letter-spacing:.16em;color:#accbc0;margin-top:4px}
-.header-badge{border:1px solid #497368;background:#204b40;color:#ddf0e7;padding:9px 14px;border-radius:100px;font-size:12px;white-space:nowrap}
-.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#daf08f;margin-right:7px;box-shadow:0 0 0 3px #daf08f25}
-.hero{background:radial-gradient(circle at 14% 18%,#336a56 0,transparent 28%),linear-gradient(135deg,#143b33 0%,#194b3d 58%,#11362e 100%);color:#fff;position:relative;overflow:hidden}
-.hero:after{content:"";position:absolute;width:500px;height:500px;right:-160px;top:-240px;border:1px solid #ffffff19;border-radius:50%;box-shadow:0 0 0 76px #ffffff08,0 0 0 150px #ffffff05;pointer-events:none}
+.brand-lockup small{font-size:10px;letter-spacing:.16em;color:#688076;margin-top:4px}
+.header-badge{border:1px solid #cedbd1;background:#edf3ee;color:#3e6251;padding:9px 14px;border-radius:100px;font-size:12px;white-space:nowrap}
+.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#62876e;margin-right:7px;box-shadow:0 0 0 3px #62876e25}
+.hero{background:linear-gradient(135deg,#edf3ee 0%,#e4ede7 65%,#dce8e0 100%);color:#29443a;position:relative;overflow:hidden}
+.hero:after{content:"";position:absolute;width:500px;height:500px;right:-160px;top:-240px;border:1px solid #97b4a244;border-radius:50%;box-shadow:0 0 0 76px #97b4a219,0 0 0 150px #97b4a20e;pointer-events:none}
 .hero-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(330px,.8fr);gap:70px;align-items:center;padding-block:72px 80px;position:relative;z-index:1}
 .hero-kicker,.eyebrow{font-size:11px;letter-spacing:.16em;font-weight:800;color:#669783;text-transform:uppercase}
-.hero-kicker{color:#cae6bd;display:flex;align-items:center;gap:10px;margin:0 0 20px}
-.kicker-line{width:22px;height:1px;background:#d9ed9a}
+.hero-kicker{color:#537a63;display:flex;align-items:center;gap:10px;margin:0 0 20px}
+.kicker-line{width:22px;height:1px;background:#789c83}
 .hero h1{font-size:clamp(42px,5.2vw,70px);line-height:1.13;letter-spacing:-.05em;margin:0;font-weight:800}
-.hero h1 em{font-style:normal;color:#d9ed9a}
-.hero-copy>p:not(.hero-kicker){max-width:520px;margin:23px 0 28px;color:#d0e3d9;font-size:16px;line-height:1.9}
+.hero h1 em{font-style:normal;color:#527b62}
+.hero-copy>p:not(.hero-kicker){max-width:520px;margin:23px 0 28px;color:#50685b;font-size:16px;line-height:1.9}
 .hero-chips{display:flex;flex-wrap:wrap;gap:9px}
-.hero-chips span{border:1px solid #6a927d;border-radius:100px;padding:7px 12px;font-size:12px;color:#e0f1e7;background:#ffffff0c}
-.flow-card{background:#fcfff8;color:#214236;border:1px solid #d8e5d8;border-radius:23px;box-shadow:0 23px 50px #071f1a44;overflow:hidden;transform:rotate(1deg)}
+.hero-chips span{border:1px solid #bbcfbf;border-radius:100px;padding:7px 12px;font-size:12px;color:#496b54;background:#ffffff88}
+.flow-card{background:#fcfdf9;color:#29443a;border:1px solid #d6e1d8;border-radius:23px;box-shadow:0 18px 36px #46625119;overflow:hidden;transform:rotate(1deg)}
 .flow-card-head,.flow-card-foot{padding:17px 23px;display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:800;letter-spacing:.06em}
 .flow-card-head{border-bottom:1px solid #e5ece5}
 .flow-live{color:#42876a;font-size:11px}
@@ -38,17 +38,17 @@ a{color:inherit}
 .flow-step strong{font-size:15px}
 .flow-step small{font-size:12px;color:#73887d;margin-top:5px}
 .flow-icon{font-size:20px;color:#54a17b}
-.flow-card-foot{background:#edf4e9;color:#668573;font-weight:600}
+.flow-card-foot{background:#f0f4ee;color:#567460;font-weight:600}
 .content{padding-block:28px 76px}
-.safety-note{display:flex;align-items:center;gap:14px;padding:17px 20px;background:#fff6e7;border:1px solid #efdfbe;border-radius:14px;color:#66512a}
-.safety-icon{width:29px;height:29px;border-radius:50%;background:#f4d5a3;display:grid;place-items:center;font-weight:900;flex:none}
+.safety-note{display:flex;align-items:center;gap:14px;padding:17px 20px;background:#f7f2e9;border:1px solid #e8dcc7;border-radius:14px;color:#65553d}
+.safety-icon{width:29px;height:29px;border-radius:50%;background:#ead8b8;display:grid;place-items:center;font-weight:900;flex:none}
 .safety-note strong{font-size:14px}
 .safety-note p{margin:3px 0 0;font-size:12px;line-height:1.6}
 .safety-label{margin-left:auto;font-size:10px;letter-spacing:.12em;font-weight:800;white-space:nowrap;color:#a78149}
 .panel{background:#fff;border:1px solid #e1e9e0;border-radius:18px;box-shadow:0 12px 35px #244b3510}
 .identity-panel{display:grid;grid-template-columns:1fr minmax(300px,430px);gap:30px;align-items:center;padding:28px 32px;margin-top:22px}
 .identity-copy h2,.section-heading h2,.dashboard-head h2{font-size:clamp(23px,2.8vw,31px);letter-spacing:-.04em;margin:7px 0}
-.identity-copy p,.section-heading p,.dashboard-head p{margin:0;color:#73877b;font-size:13px;line-height:1.7}
+.identity-copy p,.section-heading p,.dashboard-head p{margin:0;color:#596e61;font-size:13px;line-height:1.7}
 .identity-controls{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}
 .identity-controls label{grid-column:1/-1;color:#567368;font-size:12px;font-weight:700}
 select,input{width:100%;min-height:44px;background:#fbfdf9;border:1px solid #cadbd0;border-radius:10px;color:#1b3b30;padding:10px 13px;outline:none}
@@ -65,11 +65,11 @@ button.danger:hover:not(:disabled){background:#f9e2d7}
 .dashboard-head h2{font-size:32px}
 .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}
 .metric{padding:20px 22px;background:#eaf2e9;border:1px solid #dce9dc;border-radius:15px;display:grid;gap:3px}
-.metric:nth-child(2){background:#f8f2e7;border-color:#f1e7d0}
+.metric:nth-child(2){background:#f3f0e9;border-color:#e8e0d3}
 .metric:nth-child(3){background:#e9efed}
-.metric-label{font-size:12px;font-weight:700;color:#698272}
+.metric-label{font-size:12px;font-weight:700;color:#5b7463}
 .metric strong{font-size:34px;line-height:1.2;letter-spacing:-.04em}
-.metric small{font-size:11px;color:#8ba090}
+.metric small{font-size:11px;color:#607567}
 .section-panel{padding:28px 32px;margin-top:24px}
 .section-heading{display:flex;justify-content:space-between;align-items:center;gap:24px;padding-bottom:22px;border-bottom:1px solid #e9efea}
 .section-heading h2{margin:8px 0 6px}
@@ -82,7 +82,7 @@ button.danger:hover:not(:disabled){background:#f9e2d7}
 .card-head strong{font-size:17px;letter-spacing:-.02em}
 .card p{margin:9px 0;color:#4c6958;font-size:13px;line-height:1.6}
 .card p:first-of-type{margin-top:15px}
-.card .meta{font-size:12px;color:#84968a}
+.card .meta{font-size:12px;color:#617668}
 .card-foot{margin-top:16px;padding-top:15px;border-top:1px solid #e6ede6}
 .card-foot>strong{font-size:13px}
 .actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}

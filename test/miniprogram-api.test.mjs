@@ -31,7 +31,7 @@ test('小程序断网后使用同一请求编号重试，成功后清除待提�
     if (attempts === 1) options.fail({});
     else options.success({ statusCode: 201, data: { id: 'demo-order' } });
   });
-  const draft = { campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', pickupCode: 'TEST-123456', qty: 1, size: 'small', speed: 'normal', slot: 'today-evening' };
+  const draft = { campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', pickupCode: 'TEST-123456', qty: 1, size: 'small', speed: 'normal', slot: '2026-10-23T09:00:00+08:00' };
   await assert.rejects(h.api.submitOrder(draft), error => error.code === 'NETWORK_ERROR');
   assert.equal(h.api.pendingDraft().draft.pickupCode, 'TEST-123456');
   await h.api.submitOrder(draft);
@@ -45,7 +45,7 @@ test('小程序遇 401 清除身份并返回选择页；危险接口模式停止
   assert.equal(h.app.globalData.token, '');
   assert.equal(h.launches[0].url, '/pages/login/index');
 
-  const unsafe = harness(options => options.success({ statusCode: 200, data: { mode: 'PUBLIC', apiContract: 1 } }));
+  const unsafe = harness(options => options.success({ statusCode: 200, data: { mode: 'PUBLIC', apiContract: 2 } }));
   await assert.rejects(unsafe.api.checkDemo(), error => error.code === 'UNSAFE_MODE');
 });
 

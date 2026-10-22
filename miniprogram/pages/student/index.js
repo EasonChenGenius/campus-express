@@ -7,7 +7,7 @@ Page({
     qtyOptions: [1, 2, 3], qtyIndex: 0,
     sizeOptions: ['小件', '大件'], sizeIndex: 0,
     speedOptions: ['普通', '加急'], speedIndex: 0,
-    slotOptions: ['今日傍晚', '明日中午'], slotIndex: 0,
+    slots: [], slotOptions: [], slotIndex: 0,
     pickupCode: '', handoff: '', busy: false, error: '', pendingHint: false
   },
   async onShow() {
@@ -18,16 +18,17 @@ Page({
       const catalog = await api.request('/api/catalog');
       const stations = catalog.stations.filter(s => s.campus === user.campus);
       const zones = catalog.campusZones[user.campus] || [];
+      const slots = catalog.slots || [];
       const pending = api.pendingDraft();
       const draft = pending && pending.draft.campus === user.campus ? pending.draft : null;
       const zoneIndex = draft ? Math.max(0, zones.indexOf(draft.zone)) : 0;
       this.setData({
-        stations, zones, zoneIndex,
+        stations, zones, slots, slotOptions: slots.map(item => item.label), zoneIndex,
         stationIndex: draft ? Math.max(0, stations.findIndex(s => s.id === draft.stationId)) : 0,
         qtyIndex: draft ? Math.max(0, [1, 2, 3].indexOf(draft.qty)) : 0,
         sizeIndex: draft && draft.size === 'large' ? 1 : 0,
         speedIndex: draft && draft.speed === 'urgent' ? 1 : 0,
-        slotIndex: draft && draft.slot === 'tomorrow-noon' ? 1 : 0,
+        slotIndex: draft ? Math.max(0, slots.findIndex(item => item.value === draft.slot)) : 0,
         pickupCode: draft ? draft.pickupCode : '',
         handoff: zones[zoneIndex] ? zones[zoneIndex] + '楼下公共入口（测试）' : '',
         pendingHint: Boolean(draft)
@@ -51,7 +52,7 @@ Page({
     if (!user) return;
     const pickupCode = api.demoCode(this.data.pickupCode);
     if (!pickupCode) return this.setData({ error: '仅可输入虚构测试码，例如 TEST-123456、TEST-5-2-0042 或 TEST-9VK518。' });
-    if (!this.data.stations.length || !this.data.zones.length) return this.setData({ error: '当前没有可用测试站点或苑区。' });
+    if (!this.data.stations.length || !this.data.zones.length || !this.data.slots.length) return this.setData({ error: '当前没有可预约的测试站点、苑区或时段。' });
     const draft = {
       campus: user.campus,
       stationId: this.data.stations[this.data.stationIndex].id,
@@ -60,7 +61,7 @@ Page({
       qty: this.data.qtyOptions[this.data.qtyIndex],
       size: this.data.sizeIndex ? 'large' : 'small',
       speed: this.data.speedIndex ? 'urgent' : 'normal',
-      slot: this.data.slotIndex ? 'tomorrow-noon' : 'today-evening'
+      slot: this.data.slots[this.data.slotIndex].value
     };
     this.setData({ busy: true, error: '' });
     try {

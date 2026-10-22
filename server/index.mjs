@@ -89,13 +89,13 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
     try {
       const url = new URL(req.url, 'http://localhost');
       if (!url.pathname.startsWith('/api/')) {
-        if (req.method !== 'GET' || !['/', '/app.js', '/style.css', '/form.css', '/pickup-code.js'].includes(url.pathname)) fail(404, '页面不存在');
+        if (req.method !== 'GET' || !['/', '/file-entry.js', '/app.js', '/style.css', '/form.css', '/pickup-code.js'].includes(url.pathname)) fail(404, '页面不存在');
         const path = join(root, 'web', url.pathname === '/' ? 'index.html' : url.pathname.slice(1));
         const content = await readFile(path);
-        res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/html; charset=utf-8', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });
+        res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });
         res.end(content); return;
       }
-      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.4.0', apiContract: 1, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
+      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.4.1', apiContract: 1, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
       if (req.method === 'GET' && url.pathname === '/api/demo/accounts') return send(res, 200, fixtures.map(([id, name, role, campus]) => ({ id, name, role, campus })));
       if (req.method === 'POST' && url.pathname === '/api/demo/login') {
         const { accountId } = await bodyOf(req);
@@ -222,5 +222,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const { port = 3000, host = '127.0.0.1' } = { port: Number(process.env.PORT || 3000) };
   if (host !== '127.0.0.1') throw Error('本地演示仅允许 127.0.0.1');
   await mkdir(join(root, 'data'), { recursive: true });
-  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.4.0 本地演示：http://${host}:${port}`));
+  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.4.1 本地演示：http://${host}:${port}`));
 }

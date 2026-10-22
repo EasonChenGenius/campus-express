@@ -8,16 +8,21 @@ const actionName = { demo_order_created: '创建测试订单', accept: '代取�
 let token = '', me = null, catalog = null, couriers = [];
 
 async function api(path, options = {}) {
-  const response = await fetch(path, { ...options, headers: { ...(options.body ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) } });
+  let response;
+  try {
+    response = await fetch(path, { ...options, headers: { ...(options.body ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) } });
+  } catch {
+    throw new Error('无法连接本地服务。请双击项目中的“启动校园快取通.command”，然后刷新页面。');
+  }
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || '请求失败');
   return data;
 }
 function message(text, error = false) { $('message').textContent = text; $('message').classList.toggle('error', error); }
-async function perform(work, success) { try { await work(); message(success); await refresh(); } catch (error) { message(error.message, true); } }
+async function perform(work, success) { try { await work(); message(success); await refresh(); return true; } catch (error) { message(error.message, true); return false; } }
 
 async function login() {
-  await perform(async () => {
+  const entered = await perform(async () => {
     const result = await api('/api/demo/login', { method: 'POST', body: JSON.stringify({ accountId: $('account').value }) });
     token = result.token; me = result.user; $('workspace').hidden = false;
     $('who').textContent = me.name;
@@ -28,6 +33,7 @@ async function login() {
     $('orders-title').textContent = me.role === 'student' ? '我的订单' : me.role === 'courier' ? '本校区待接单与我的任务' : '订单管理';
     $('orders-help').textContent = me.role === 'courier' ? '接单前仅下发任务摘要；成功接单后才显示虚构取件码和交接点。' : '服务端保存并校验每一步状态。';
   }, '已切换测试身份');
+  if (entered) $('workspace').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function orderActions(o) {
   if (me.role === 'student') {
@@ -74,6 +80,9 @@ async function refresh() {
     $('audit').innerHTML = logs.length ? logs.slice(0, 20).map(a => `<div class="audit-line">${escapeHtml(new Date(a.at).toLocaleString('zh-CN'))} · ${escapeHtml(a.actor_id)} · ${escapeHtml(actionName[a.action] || a.action)} ${a.order_id ? '· 订单 ' + escapeHtml(a.order_id.slice(0, 8)) : ''}</div>`).join('') : '<div class="empty">暂无操作记录</div>';
   }
   $('order-count').textContent = `${orders.length} 单`;
+  $('metric-total').textContent = orders.length;
+  $('metric-pending').textContent = orders.filter(o => o.status === 'pending').length;
+  $('metric-complete').textContent = orders.filter(o => o.status === 'completed').length;
   $('orders').innerHTML = orders.length ? orders.map(orderCard).join('') : '<div class="empty">目前没有测试订单</div>';
 }
 async function createOrder(event) {
@@ -98,6 +107,7 @@ async function init() {
   try {
     const accounts = await api('/api/demo/accounts');
     $('account').innerHTML = accounts.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join('');
+    $('login').disabled = accounts.length === 0;
   } catch (error) { message(error.message, true); }
   $('login').addEventListener('click', login);
   $('refresh').addEventListener('click', () => perform(refresh, '数据已刷新'));

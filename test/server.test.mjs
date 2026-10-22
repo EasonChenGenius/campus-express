@@ -107,7 +107,7 @@ test('相同请求编号只重试同一订单内容，错误响应提供稳定�
   assert.equal(unauthorized.status, 401);
   assert.equal(unauthorized.body.code, 'UNAUTHORIZED');
   const capabilities = await request('/api/capabilities');
-  assert.equal(capabilities.body.version, '0.4.0');
+  assert.equal(capabilities.body.version, '0.4.1');
   assert.equal(capabilities.body.apiContract, 1);
   assert.equal(capabilities.body.closedPilotReady, false);
 });

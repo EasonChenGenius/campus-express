@@ -3,41 +3,97 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>校园快取通 · 本地业务测试</title>
-  <link rel="stylesheet" href="/style.css">
-  <link rel="stylesheet" href="/form.css">
-  <script type="module" src="/app.js"></script>
+  <meta name="theme-color" content="#143b33">
+  <title>校园快取通 · Campus Express</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./form.css">
+  <script defer src="./file-entry.js"></script>
 </head>
 <body>
-  <header><div class="shell top"><div><strong class="brand">📦 校园快取通</strong><span class="version">V0.4.0 本地业务测试</span></div><span class="pill">真实下单与支付已关闭</span></div></header>
-  <main class="shell">
-    <section class="notice"><strong>仅使用虚构数据。</strong>测试身份可直接切换，没有真实登录；请勿填写真实取件码、姓名、电话或宿舍房间。网页只连接本机服务。</section>
-    <section class="panel identity"><div><h1>双校区业务控制台</h1><p>选择测试身份，查看不同角色实际能执行的操作。</p></div><label>测试身份<select id="account"></select></label><button id="login">进入演示</button></section>
-    <div id="message" role="status" aria-live="polite"></div>
-    <div id="workspace" hidden>
-      <section class="summary"><div><span class="eyebrow">当前身份</span><h2 id="who"></h2><p id="scope"></p></div><button id="refresh" class="secondary">刷新数据</button></section>
-      <section id="student-create" class="panel" hidden>
-        <h2>创建测试订单</h2><p>费用由服务端计算，付款状态始终为“未支付演示”。</p>
-        <form id="order-form" class="form-grid">
-          <label>校区<input id="campus" readonly></label>
-          <!-- Pickup and delivery fields adapted from coderwyx's MIT-licensed order form; see docs/THIRD_PARTY_NOTICES.md. -->
-          <label>从哪里取？<select id="station"></select></label>
-          <label>送到哪个宿舍苑区？<select id="zone"></select></label>
-          <div class="handoff-box"><strong>在哪里把包裹交给你？</strong><p>这里指代取员把包裹送来后，与你当面交接的位置；不是取快递的驿站，也不需要填写宿舍房间号。</p><span id="handoff-preview"></span></div>
-          <label>虚构取件码<input id="pickup-code" required maxlength="17" placeholder="如 TEST-5-2-0042" list="pickup-examples" autocomplete="off" spellcheck="false"><small>可试：TEST-123456、TEST-5-2-0042、TEST-9VK518。请勿填真实码。</small></label>
-          <datalist id="pickup-examples"><option value="TEST-123456"><option value="TEST-5-2-0042"><option value="TEST-9VK518"></datalist>
-          <label>件数<select id="qty"><option value="1">1 件</option><option value="2">2 件</option><option value="3">3 件</option></select></label>
-          <label>规格<select id="size"><option value="small">普通件</option><option value="large">大件</option></select></label>
-          <label>时效<select id="speed"><option value="normal">普通</option><option value="urgent">加急</option></select></label>
-          <label>预约时段<select id="slot"><option value="today-evening">今日傍晚（演示）</option><option value="tomorrow-noon">明日中午（演示）</option></select></label>
-          <div class="form-submit"><button type="submit">提交测试订单</button><small>不会产生真实配送或扣款</small></div>
-        </form>
-      </section>
-      <section class="panel"><div class="section-head"><div><h2 id="orders-title">订单</h2><p id="orders-help"></p></div><span id="order-count" class="count"></span></div><div id="orders" class="cards"></div></section>
-      <section id="admin-tools" class="panel" hidden><h2>代取员审核</h2><p>仅为测试账号审核；正式版须核验真实身份并记录证明。</p><div id="couriers" class="cards"></div></section>
-      <section id="audit-panel" class="panel" hidden><h2>操作记录</h2><p>这里只记录动作与测试账号，不记录取件码。</p><div id="audit"></div></section>
+  <header class="site-header">
+    <div class="shell topbar">
+      <div class="brand-lockup"><span class="brand-mark" aria-hidden="true">快</span><div><strong>校园快取通</strong><small>CAMPUS EXPRESS · V0.4.1</small></div></div>
+      <span class="header-badge"><span class="status-dot"></span> 本地演示 · 真实支付关闭</span>
     </div>
+  </header>
+
+  <main id="file-help" class="shell file-help" hidden>
+    <div class="file-help-icon" aria-hidden="true">↗</div>
+    <p class="eyebrow">打开方式</p>
+    <h1>页面需要本地服务</h1>
+    <p>你现在打开的是 HTML 文件。请先在项目文件夹中双击 <strong>启动校园快取通.command</strong>，保持弹出的终端窗口打开，再进入系统。</p>
+    <a class="button-link" href="http://127.0.0.1:3000/">打开校园快取通 <span aria-hidden="true">↗</span></a>
+    <p class="file-help-tip">如果链接提示无法连接，说明本地服务还没有启动。也可以在项目文件夹运行 <code>npm start</code>。</p>
   </main>
-  <footer class="shell">校园快取通 · 本地开发版 · 非四川师范大学官方服务</footer>
+
+  <div id="app-shell">
+    <section class="hero">
+      <div class="shell hero-grid">
+        <div class="hero-copy">
+          <p class="hero-kicker"><span class="kicker-line"></span> 双校区 · 一站式代取流程演示</p>
+          <h1>快递到校，<br><em>交接到楼下。</em></h1>
+          <p>从预约到接单，从取件到确认，学生、代取员和管理者在同一个系统里协作。</p>
+          <div class="hero-chips"><span>成龙校区</span><span>狮子山校区</span><span>虚构数据演示</span></div>
+        </div>
+        <div class="flow-card" aria-label="演示流程">
+          <div class="flow-card-head"><span>流程预览</span><span class="flow-live">● DEMO</span></div>
+          <div class="flow-step"><span class="flow-number">01</span><div><strong>学生预约</strong><small>选择苑区与虚构取件点</small></div><span class="flow-icon" aria-hidden="true">↗</span></div>
+          <div class="flow-step"><span class="flow-number">02</span><div><strong>代取员接单</strong><small>本校区任务池与进度更新</small></div><span class="flow-icon" aria-hidden="true">↗</span></div>
+          <div class="flow-step"><span class="flow-number">03</span><div><strong>楼下交接</strong><small>学生确认，订单完成</small></div><span class="flow-icon" aria-hidden="true">✓</span></div>
+          <div class="flow-card-foot">测试环境 · 不收款 · 不配送真实包裹</div>
+        </div>
+      </div>
+    </section>
+
+    <main class="shell content">
+      <section class="safety-note"><span class="safety-icon" aria-hidden="true">!</span><div><strong>仅限虚构数据</strong><p>测试身份可直接切换，没有真实登录。请勿填写真实取件码、姓名、电话或宿舍房间。</p></div><span class="safety-label">LOCAL ONLY</span></section>
+
+      <section class="panel identity-panel">
+        <div class="identity-copy"><span class="eyebrow">START HERE</span><h2>选择你的测试身份</h2><p>切换角色，体验学生下单、代取员履约和管理员派单。</p></div>
+        <div class="identity-controls"><label for="account">测试账号</label><select id="account" aria-label="测试账号"></select><button id="login" type="button" disabled>进入演示 <span aria-hidden="true">→</span></button></div>
+      </section>
+      <div id="message" role="status" aria-live="polite"></div>
+
+      <div id="workspace" hidden>
+        <section class="dashboard-head"><div><span class="eyebrow">WORKSPACE / 当前工作台</span><h2 id="who"></h2><p id="scope"></p></div><button id="refresh" class="secondary" type="button">↻ 刷新数据</button></section>
+        <section class="metrics" aria-label="订单概况">
+          <div class="metric"><span class="metric-label">可见订单</span><strong id="metric-total">0</strong><small>当前身份范围</small></div>
+          <div class="metric"><span class="metric-label">待接单</span><strong id="metric-pending">0</strong><small>可处理任务</small></div>
+          <div class="metric"><span class="metric-label">已完成</span><strong id="metric-complete">0</strong><small>演示订单</small></div>
+        </section>
+
+        <section id="student-create" class="panel section-panel" hidden>
+          <div class="section-heading"><div><span class="eyebrow">01 / STUDENT</span><h2>创建测试订单</h2><p>填写虚构取件信息；费用由服务端计算，付款状态始终为未支付演示。</p></div><span class="section-symbol" aria-hidden="true">↗</span></div>
+          <form id="order-form" class="order-form">
+            <div class="form-section"><div class="form-section-title"><span>①</span><div><strong>取件与交接</strong><small>先确认校区、测试点和宿舍苑区</small></div></div>
+              <div class="form-grid">
+                <label>所在校区<input id="campus" readonly></label>
+                <!-- Pickup and delivery fields adapted from coderwyx's MIT-licensed order form; see docs/THIRD_PARTY_NOTICES.md. -->
+                <label>从哪里取？<select id="station"></select></label>
+                <label>送到哪个宿舍苑区？<select id="zone"></select></label>
+                <div class="handoff-box"><div><strong>楼下当面交接</strong><p>代取员会在宿舍苑区公共入口与你交接。这里不是快递驿站，也不需要填写房间号。</p></div><span id="handoff-preview"></span></div>
+              </div>
+            </div>
+            <div class="form-section"><div class="form-section-title"><span>②</span><div><strong>包裹与时段</strong><small>只填写 TEST- 开头的虚构取件码</small></div></div>
+              <div class="form-grid">
+                <label class="code-field">虚构取件码<input id="pickup-code" required maxlength="17" placeholder="如 TEST-5-2-0042" list="pickup-examples" autocomplete="off" spellcheck="false"><small>可试：TEST-123456、TEST-5-2-0042、TEST-9VK518。请勿填真实码。</small></label>
+                <datalist id="pickup-examples"><option value="TEST-123456"><option value="TEST-5-2-0042"><option value="TEST-9VK518"></datalist>
+                <label>件数<select id="qty"><option value="1">1 件</option><option value="2">2 件</option><option value="3">3 件</option></select></label>
+                <label>规格<select id="size"><option value="small">普通件</option><option value="large">大件</option></select></label>
+                <label>时效<select id="speed"><option value="normal">普通</option><option value="urgent">加急</option></select></label>
+                <label>预约时段<select id="slot"><option value="today-evening">今日傍晚（演示）</option><option value="tomorrow-noon">明日中午（演示）</option></select></label>
+              </div>
+            </div>
+            <div class="form-submit"><div><strong>准备好了？</strong><small>不会产生真实配送或扣款</small></div><button type="submit">提交测试订单 <span aria-hidden="true">→</span></button></div>
+          </form>
+        </section>
+
+        <section class="panel section-panel"><div class="section-heading"><div><span class="eyebrow">02 / ORDERS</span><h2 id="orders-title">订单</h2><p id="orders-help"></p></div><span id="order-count" class="count">0 单</span></div><div id="orders" class="cards"></div></section>
+        <section id="admin-tools" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">03 / TEAM</span><h2>代取员审核</h2><p>仅为测试账号审核；正式版须核验真实身份并记录证明。</p></div></div><div id="couriers" class="cards"></div></section>
+        <section id="audit-panel" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">04 / AUDIT</span><h2>操作记录</h2><p>记录测试账号的操作，不记录取件码。</p></div></div><div id="audit"></div></section>
+      </div>
+    </main>
+  </div>
+  <footer class="site-footer"><div class="shell"><span>校园快取通 <b>Campus Express</b></span><span>本地开发版 · 非四川师范大学官方服务</span></div></footer>
 </body>
 </html>

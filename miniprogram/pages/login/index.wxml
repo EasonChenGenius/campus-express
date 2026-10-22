@@ -1,0 +1,17 @@
+<view class="page">
+  <view class="banner">V{{version || '0.4.0'}} 本机演示 · 虚构数据 · 未付款 · 禁止真实下单</view>
+  <view class="title">校园快取通</view>
+  <view class="subtitle">成龙校区与狮子山校区的代取流程演示</view>
+  <view class="card">
+    <view class="card-title">选择测试身份</view>
+    <view class="field">
+      <text class="label">虚构账号</text>
+      <picker range="{{accounts}}" range-key="name" value="{{selected}}" bindchange="changeAccount">
+        <view class="control">{{accounts.length ? accounts[selected].name : '正在读取测试账号'}}</view>
+      </picker>
+    </view>
+    <button class="button" disabled="{{loading || busy || !accounts.length}}" bindtap="enter">进入演示</button>
+    <view class="error" wx:if="{{error}}">{{error}}</view>
+  </view>
+  <view class="notice">测试身份可直接切换，没有真实微信登录。请勿填写真实取件码或学生资料。</view>
+</view>

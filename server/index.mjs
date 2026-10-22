@@ -52,6 +52,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
     db.prepare('INSERT INTO audit_logs(at,actor_id,action,order_id,target_id) VALUES (?,?,?,?,?)')
       .run(new Date().toISOString(), actor, action, orderId, targetId);
   const fail = (status, message) => { const e = new Error(message); e.status = status; throw e; };
+  const errorCode = status => ({ 400: 'VALIDATION_ERROR', 401: 'UNAUTHORIZED', 403: 'FORBIDDEN', 404: 'NOT_FOUND', 405: 'METHOD_NOT_ALLOWED', 409: 'CONFLICT', 413: 'PAYLOAD_TOO_LARGE', 415: 'UNSUPPORTED_MEDIA_TYPE' }[status] || 'INTERNAL_ERROR');
   const send = (res, status, value) => {
     res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
     res.end(JSON.stringify(value));
@@ -94,7 +95,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/html; charset=utf-8', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });
         res.end(content); return;
       }
-      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.3.1', mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false });
+      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.4.0', apiContract: 1, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
       if (req.method === 'GET' && url.pathname === '/api/demo/accounts') return send(res, 200, fixtures.map(([id, name, role, campus]) => ({ id, name, role, campus })));
       if (req.method === 'POST' && url.pathname === '/api/demo/login') {
         const { accountId } = await bodyOf(req);
@@ -105,7 +106,8 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         return send(res, 200, { token, user });
       }
       const token = req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
-      const user = token && getUser(sessions.get(token));
+      const sessionUserId = token && sessions.get(token);
+      const user = sessionUserId && getUser(sessionUserId);
       if (!user) fail(401, '请先选择测试身份');
       if (req.method === 'GET' && url.pathname === '/api/me') return send(res, 200, user);
       if (req.method === 'GET' && url.pathname === '/api/catalog') return send(res, 200, { campusZones, stations });
@@ -124,7 +126,14 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         const b = await bodyOf(req);
         if (!/^[a-zA-Z0-9-]{8,64}$/.test(b.requestId || '')) fail(400, '缺少有效请求编号');
         const existing = db.prepare('SELECT * FROM orders WHERE student_id=? AND request_id=?').get(user.id, b.requestId);
-        if (existing) return send(res, 200, view(existing, user));
+        if (existing) {
+          const sameRequest = existing.campus === b.campus && existing.station_id === b.stationId
+            && existing.zone === b.zone && existing.pickup_code === parseDemoPickupCode(b.pickupCode)?.value
+            && existing.qty === b.qty && existing.size === b.size && existing.speed === b.speed && existing.slot === b.slot
+            && !Object.hasOwn(b, 'handoff');
+          if (!sameRequest) fail(409, '该请求编号已用于其他订单内容，请刷新后重试');
+          return send(res, 200, view(existing, user));
+        }
         const station = stations.find(s => s.id === b.stationId && s.campus === user.campus);
         if (!station || b.campus !== user.campus || !campusZones[user.campus].includes(b.zone)) fail(400, '校区、苑区或测试站点无效');
         if (!Number.isInteger(b.qty) || b.qty < 1 || b.qty > 3 || !['small', 'large'].includes(b.size) || !['normal', 'urgent'].includes(b.speed)) fail(400, '包裹参数无效');
@@ -202,7 +211,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
       }
       fail(404, '接口不存在');
     } catch (e) {
-      send(res, e.status || 500, { error: e.status ? e.message : '服务器内部错误' });
+      send(res, e.status || 500, { code: errorCode(e.status || 500), error: e.status ? e.message : '服务器内部错误' });
       if (!e.status) console.error(e);
     }
   });
@@ -213,5 +222,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const { port = 3000, host = '127.0.0.1' } = { port: Number(process.env.PORT || 3000) };
   if (host !== '127.0.0.1') throw Error('本地演示仅允许 127.0.0.1');
   await mkdir(join(root, 'data'), { recursive: true });
-  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.3.1 本地演示：http://${host}:${port}`));
+  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.4.0 本地演示：http://${host}:${port}`));
 }

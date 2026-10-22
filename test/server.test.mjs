@@ -91,3 +91,50 @@ test('取件码识别常见形态但只接受虚构测试码', async t => {
     assert.equal((await request('/api/orders', student, 'POST', orderBody({ pickupCode: code }))).status, 400);
   }
 });
+
+test('相同请求编号只重试同一订单内容，错误响应提供稳定代码', async t => {
+  const { request, login, orderBody } = await setup(t);
+  const student = await login('student-a');
+  const body = orderBody({ pickupCode: 'test-123456' });
+  const created = await request('/api/orders', student, 'POST', body);
+  assert.equal(created.status, 201);
+  assert.equal((await request('/api/orders', student, 'POST', { ...body, pickupCode: 'TEST-123456' })).body.id, created.body.id);
+  const changed = await request('/api/orders', student, 'POST', { ...body, zone: '西苑' });
+  assert.equal(changed.status, 409);
+  assert.equal(changed.body.code, 'CONFLICT');
+  assert.equal((await request('/api/orders', student)).body.length, 1);
+  const unauthorized = await request('/api/orders', '0'.repeat(64));
+  assert.equal(unauthorized.status, 401);
+  assert.equal(unauthorized.body.code, 'UNAUTHORIZED');
+  const capabilities = await request('/api/capabilities');
+  assert.equal(capabilities.body.version, '0.4.0');
+  assert.equal(capabilities.body.apiContract, 1);
+  assert.equal(capabilities.body.closedPilotReady, false);
+});
+
+test('两个校区完整测试订单流，20 个不同代取员请求只有一人接单', async t => {
+  const { request, login, orderBody } = await setup(t);
+  const [studentCL, studentSZ, courierCL1, courierCL2, courierSZ, manager] =
+    await Promise.all(['student-a', 'student-b', 'runner-cl-1', 'runner-cl-2', 'runner-sz-1', 'manager-cl'].map(login));
+  assert.equal((await request('/api/couriers/runner-cl-2/approval', manager, 'POST', { approved: true })).status, 200);
+  const cl = (await request('/api/orders', studentCL, 'POST', orderBody())).body;
+  const preClaim = (await request('/api/orders/' + cl.id, courierCL2)).body;
+  assert.equal(preClaim.pickup_code, undefined);
+  assert.equal(preClaim.handoff, undefined);
+  const results = await Promise.all(Array.from({ length: 20 }, (_, i) =>
+    request('/api/orders/' + cl.id + '/accept', i % 2 ? courierCL1 : courierCL2, 'POST')));
+  assert.equal(results.filter(r => r.status === 200).length, 1);
+  const winner = results.find(r => r.status === 200).body.courier_id === 'runner-cl-1' ? courierCL1 : courierCL2;
+  for (const status of ['picked', 'delivering', 'delivered'])
+    assert.equal((await request('/api/orders/' + cl.id + '/progress', winner, 'POST', { status })).status, 200);
+  assert.equal((await request('/api/orders/' + cl.id + '/confirm', studentCL, 'POST')).body.status, 'completed');
+
+  const sz = (await request('/api/orders', studentSZ, 'POST', orderBody({
+    campus: 'shizishan', stationId: 'demo-sz', zone: '博学苑'
+  }))).body;
+  assert.equal((await request('/api/orders/' + sz.id, courierCL1)).status, 404);
+  assert.equal((await request('/api/orders/' + sz.id + '/accept', courierSZ, 'POST')).status, 200);
+  for (const status of ['picked', 'delivering', 'delivered'])
+    assert.equal((await request('/api/orders/' + sz.id + '/progress', courierSZ, 'POST', { status })).status, 200);
+  assert.equal((await request('/api/orders/' + sz.id + '/confirm', studentSZ, 'POST')).body.status, 'completed');
+});

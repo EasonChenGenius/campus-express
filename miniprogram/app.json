@@ -1,0 +1,16 @@
+{
+  "pages": [
+    "pages/login/index",
+    "pages/student/index",
+    "pages/orders/index",
+    "pages/courier/index",
+    "pages/order/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "校园快取通 · 演示",
+    "navigationBarBackgroundColor": "#143a3b",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f5f8f6"
+  },
+  "style": "v2"
+}

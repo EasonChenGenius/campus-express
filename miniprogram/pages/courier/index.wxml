@@ -5,6 +5,7 @@
     <button class="button button-secondary" bindtap="refresh" disabled="{{loading}}">刷新任务</button>
     <button class="button button-secondary" bindtap="switchAccount">切换测试身份</button>
   </view>
+  <view class="card" wx:if="{{availability}}"><view class="card-title">接单能力</view><view>{{availability.online ? '已上线' : '已下线'}} · 同时处理 {{availability.activeCount}}/{{availability.maxActive}} 单</view><button class="button button-secondary" disabled="{{busy || (!availability.approved && !availability.online)}}" bindtap="toggleAvailability">{{availability.online ? '下线暂停新接单' : '上线接单'}}</button></view>
   <view class="error" wx:if="{{error}}">{{error}}</view>
   <view class="card-title">本校区待接单 {{pool.length}}</view>
   <view class="muted" wx:if="{{!pool.length}}">暂无可接测试任务；未审核身份会收到拒绝提示。</view>
@@ -12,7 +13,7 @@
     <view class="row"><text class="card-title">{{item.zone}} · {{item.qty}} 件</text><text class="pill">{{item.statusName}}</text></view>
     <view>{{item.slotName}} · 模拟报价 ¥{{item.amountText}}</view>
     <view class="muted">接单前不显示取件码和交接位置 · {{item.shortId}}</view>
-    <button class="button" data-id="{{item.id}}" disabled="{{busy}}" bindtap="accept">接单</button>
+    <button class="button" data-id="{{item.id}}" disabled="{{busy || !canAccept}}" bindtap="accept">接单</button>
   </view>
   <view class="card-title">我的任务 {{mine.length}}</view>
   <view class="muted" wx:if="{{!mine.length}}">还没有已接测试任务。</view>

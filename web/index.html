@@ -12,7 +12,7 @@
 <body>
   <header class="site-header">
     <div class="shell topbar">
-      <div class="brand-lockup"><span class="brand-mark" role="img" aria-label="四川师范大学校徽"></span><div><strong>校园快取通</strong><small>CAMPUS EXPRESS · V0.4.2</small></div></div>
+      <div class="brand-lockup"><span class="brand-mark" role="img" aria-label="四川师范大学校徽"></span><div><strong>校园快取通</strong><small>CAMPUS EXPRESS · V0.5.0</small></div></div>
       <span class="header-badge"><span class="status-dot"></span> 非官方演示 · 真实支付关闭</span>
     </div>
   </header>
@@ -89,6 +89,8 @@
         </section>
 
         <section class="panel section-panel"><div class="section-heading"><div><span class="eyebrow">02 / ORDERS</span><h2 id="orders-title">订单</h2><p id="orders-help"></p></div><span id="order-count" class="count">0 单</span></div><div id="orders" class="cards"></div></section>
+        <section id="courier-tools" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">03 / CAPACITY</span><h2>接单状态</h2><p id="availability">正在读取接单状态…</p></div><button id="toggle-availability" type="button" class="secondary">切换上线状态</button></div></section>
+        <section id="operations-panel" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">03 / OPERATIONS</span><h2>后台待办</h2><p>优先处理异常订单，再查看超过 30 分钟无人接单的测试订单。</p></div></div><div id="operations" class="cards"></div></section>
         <section id="admin-tools" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">03 / TEAM</span><h2>代取员审核</h2><p>仅为测试账号审核；正式版须核验真实身份并记录证明。</p></div></div><div id="couriers" class="cards"></div></section>
         <section id="audit-panel" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">04 / AUDIT</span><h2>操作记录</h2><p>记录测试账号的操作，不记录取件码。</p></div></div><div id="audit"></div></section>
       </div>

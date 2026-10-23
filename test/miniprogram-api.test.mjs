@@ -39,13 +39,20 @@ test('小程序断网后使用同一请求编号重试，成功后清除待提�
   assert.equal(h.api.pendingDraft(), null);
 });
 
+test('时段已满返回 409 后清除不可重试草稿', async () => {
+  const h = harness(options => options.success({ statusCode: 409, data: { code: 'CONFLICT', error: '该时段已约满' } }));
+  const draft = { campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', pickupCode: 'TEST-123456', qty: 1, size: 'small', speed: 'normal', slot: '2026-10-24T09:00:00+08:00' };
+  await assert.rejects(h.api.submitOrder(draft), error => error.status === 409);
+  assert.equal(h.api.pendingDraft(), null);
+});
+
 test('小程序遇 401 清除身份并返回选择页；危险接口模式停止操作', async () => {
   const h = harness(options => options.success({ statusCode: 401, data: { code: 'UNAUTHORIZED', error: '登录失效' } }));
   await assert.rejects(h.api.request('/api/orders'), error => error.code === 'UNAUTHORIZED');
   assert.equal(h.app.globalData.token, '');
   assert.equal(h.launches[0].url, '/pages/login/index');
 
-  const unsafe = harness(options => options.success({ statusCode: 200, data: { mode: 'PUBLIC', apiContract: 3 } }));
+  const unsafe = harness(options => options.success({ statusCode: 200, data: { mode: 'PUBLIC', apiContract: 4 } }));
   await assert.rejects(unsafe.api.checkDemo(), error => error.code === 'UNSAFE_MODE');
 });
 

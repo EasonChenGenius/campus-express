@@ -23,7 +23,7 @@ Page({
       const draft = pending && pending.draft.campus === user.campus ? pending.draft : null;
       const zoneIndex = draft ? Math.max(0, zones.indexOf(draft.zone)) : 0;
       this.setData({
-        stations, zones, slots, slotOptions: slots.map(item => item.label), zoneIndex,
+        stations, zones, slots, slotOptions: slots.map(item => item.label + ' · 剩余 ' + item.remaining + ' 个名额'), zoneIndex,
         stationIndex: draft ? Math.max(0, stations.findIndex(s => s.id === draft.stationId)) : 0,
         qtyIndex: draft ? Math.max(0, [1, 2, 3].indexOf(draft.qty)) : 0,
         sizeIndex: draft && draft.size === 'large' ? 1 : 0,
@@ -69,6 +69,7 @@ Page({
       this.setData({ pendingHint: false });
       wx.navigateTo({ url: '/pages/order/index?id=' + order.id });
     } catch (error) {
+      if (error.status === 409) await this.onShow();
       this.setData({ error: error.message, pendingHint: error.code === 'NETWORK_ERROR' || this.data.pendingHint });
     } finally {
       this.setData({ busy: false });

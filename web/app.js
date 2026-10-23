@@ -17,11 +17,11 @@ async function api(path, options = {}) {
     throw new Error('无法连接本地服务。请双击项目中的“启动校园快取通.command”，然后刷新页面。');
   }
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || '请求失败');
+  if (!response.ok) { const error = new Error(data.error || '请求失败'); error.status = response.status; throw error; }
   return data;
 }
 function message(text, error = false) { $('message').textContent = text; $('message').classList.toggle('error', error); }
-async function perform(work, success) { try { await work(); message(success); await refresh(); return true; } catch (error) { message(error.message, true); return false; } }
+async function perform(work, success) { try { await work(); message(success); await refresh(); return true; } catch (error) { if (error.status === 409) await refresh().catch(() => {}); message(error.message, true); return false; } }
 
 async function login() {
   const entered = await perform(async () => {
@@ -32,6 +32,11 @@ async function login() {
     $('student-create').hidden = me.role !== 'student';
     $('admin-tools').hidden = !['admin', 'manager'].includes(me.role);
     $('operations-panel').hidden = !['admin', 'manager'].includes(me.role);
+    $('slot-panel').hidden = !['admin', 'manager'].includes(me.role);
+    if (['admin', 'manager'].includes(me.role)) {
+      $('slot-campus').innerHTML = Object.entries(campusName).filter(([id]) => me.role === 'admin' || id === me.campus).map(([id,label]) => `<option value="${id}">${label}</option>`).join('');
+      $('slot-campus').disabled = me.role === 'manager';
+    }
     $('courier-tools').hidden = me.role !== 'courier';
     $('audit-panel').hidden = !['admin', 'manager'].includes(me.role);
     $('orders-title').textContent = me.role === 'student' ? '我的订单' : me.role === 'courier' ? '本校区待接单与我的任务' : '订单管理';
@@ -90,7 +95,7 @@ async function refresh() {
     $('zone').innerHTML = catalog.campusZones[me.campus].map(z => `<option value="${escapeHtml(z)}">${escapeHtml(z)}</option>`).join('');
     if (catalog.campusZones[me.campus].includes(previous)) $('zone').value = previous;
     const previousSlot = $('slot').value;
-    $('slot').innerHTML = catalog.slots.map(s => `<option value="${escapeHtml(s.value)}">${escapeHtml(s.label)}</option>`).join('');
+    $('slot').innerHTML = catalog.slots.length ? catalog.slots.map(s => `<option value="${escapeHtml(s.value)}">${escapeHtml(s.label)} · 剩余 ${s.remaining} 个名额</option>`).join('') : '<option value="">暂无可预约时段</option>';
     if (catalog.slots.some(s => s.value === previousSlot)) $('slot').value = previousSlot;
     updateHandoffPreview();
   }
@@ -99,6 +104,8 @@ async function refresh() {
     $('couriers').innerHTML = couriers.map(c => `<div class="card card-head"><span><strong>${escapeHtml(c.name)}</strong><br><span class="meta">${escapeHtml(campusName[c.campus])} · ${c.approved ? '已审核' : '待审核'} · ${c.online ? '在线' : '离线'} · 处理中 ${c.active_count}/${c.max_active}</span></span><div class="actions"><label class="capacity-label">上限 <select aria-label="${escapeHtml(c.name)}接单上限" data-capacity-select="${escapeHtml(c.id)}">${[1,2,3,4,5].map(n => `<option value="${n}" ${c.max_active === n ? 'selected' : ''}>${n} 单</option>`).join('')}</select></label><button class="secondary" data-courier="${escapeHtml(c.id)}" data-capacity="true">保存上限</button><button class="${c.approved ? 'danger' : ''}" data-courier="${escapeHtml(c.id)}" data-approved="${c.approved ? 'false' : 'true'}">${c.approved ? '暂停资格' : '审核通过'}</button></div></div>`).join('');
     const queue = await api('/api/operations/queue');
     $('operations').innerHTML = `<div class="queue-summary">待处理异常 ${queue.exceptions.length} 单 · 超过 30 分钟无人接单 ${queue.overdue.length} 单</div>${queue.exceptions.map(o => `<div class="card"><strong>${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)} · ${escapeHtml(reasonName[o.exception?.reason] || '')}</strong><p class="meta">订单 ${escapeHtml(o.id.slice(0,8))} · 可在下方订单管理中恢复、改派或关闭</p></div>`).join('')}${queue.overdue.map(o => `<div class="card"><strong>${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)} · 等待接单超时</strong><p class="meta">订单 ${escapeHtml(o.id.slice(0,8))} · 可在下方订单管理中人工派单</p></div>`).join('')}${!queue.exceptions.length && !queue.overdue.length ? '<div class="empty">目前没有后台待办</div>' : ''}`;
+    const slotData = await api(`/api/slots/capacity?campus=${encodeURIComponent($('slot-campus').value)}`);
+    $('slot-capacities').innerHTML = slotData.slots.map(s => `<div class="card card-head"><span><strong>${escapeHtml(s.label)}</strong><br><span class="meta">已预约 ${s.booked} · 剩余 ${s.remaining}</span></span><div class="actions"><label class="capacity-label">总名额 <input type="number" min="0" max="20" step="1" value="${s.capacity}" data-slot-capacity="${escapeHtml(s.value)}"></label><button class="secondary" data-slot="${escapeHtml(s.value)}">保存</button></div></div>`).join('') || '<div class="empty">今天和明天没有未来时段</div>';
     const logs = await api('/api/audit');
     $('audit').innerHTML = logs.length ? logs.slice(0, 20).map(a => `<div class="audit-line">${escapeHtml(new Date(a.at).toLocaleString('zh-CN'))} · ${escapeHtml(a.actor_id)} · ${escapeHtml(actionName[a.action] || a.action)} ${a.order_id ? '· 订单 ' + escapeHtml(a.order_id.slice(0, 8)) : ''}</div>`).join('') : '<div class="empty">暂无操作记录</div>';
   }
@@ -118,7 +125,8 @@ async function createOrder(event) {
 async function handleClick(event) {
   const button = event.target.closest('button');
   if (!button) return;
-  const { id, action, next, courier, approved, capacity, resolution } = button.dataset;
+  const { id, action, next, courier, approved, capacity, resolution, slot } = button.dataset;
+  if (slot) return perform(() => api('/api/slots/capacity', { method: 'POST', body: JSON.stringify({ campus: $('slot-campus').value, slot, capacity: Number(document.querySelector(`[data-slot-capacity="${slot}"]`).value) }) }), '时段容量已更新');
   if (courier && capacity) return perform(() => api(`/api/couriers/${courier}/capacity`, { method: 'POST', body: JSON.stringify({ maxActive: Number(document.querySelector(`[data-capacity-select="${courier}"]`).value) }) }), '接单上限已更新');
   if (courier) return perform(() => api(`/api/couriers/${courier}/approval`, { method: 'POST', body: JSON.stringify({ approved: approved === 'true' }) }), '审核状态已更新');
   if (!id || !action) return;
@@ -137,6 +145,7 @@ async function init() {
   } catch (error) { message(error.message, true); }
   $('login').addEventListener('click', login);
   $('refresh').addEventListener('click', () => perform(refresh, '数据已刷新'));
+  $('slot-campus').addEventListener('change', () => perform(refresh, '已切换时段校区'));
   $('toggle-availability').addEventListener('click', () => perform(() => api('/api/couriers/me/availability', { method: 'POST', body: JSON.stringify({ online: !availability.online }) }), '接单状态已更新'));
   $('order-form').addEventListener('submit', createOrder);
   $('zone').addEventListener('change', updateHandoffPreview);

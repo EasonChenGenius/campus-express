@@ -30,7 +30,7 @@
       <picker range="{{speedOptions}}" value="{{speedIndex}}" data-field="speedIndex" bindchange="changePicker"><view class="control">{{speedOptions[speedIndex]}}</view></picker>
     </view>
     <view class="field"><text class="label">预约时段</text>
-      <picker range="{{slotOptions}}" value="{{slotIndex}}" data-field="slotIndex" bindchange="changePicker"><view class="control">{{slotOptions[slotIndex]}}</view></picker>
+      <picker range="{{slotOptions}}" value="{{slotIndex}}" data-field="slotIndex" bindchange="changePicker"><view class="control">{{slotOptions[slotIndex] || '暂无可预约时段'}}</view></picker>
     </view>
     <view class="notice" wx:if="{{pendingHint}}">上次提交结果未确认。保持表单内容不变重试，系统会使用同一请求编号。</view>
     <view class="error" wx:if="{{error}}">{{error}}</view>

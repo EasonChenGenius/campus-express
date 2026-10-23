@@ -5,6 +5,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':
 const campusName = { chenglong: '成龙校区', shizishan: '狮子山校区' };
 const statusName = { pending: '待接单', assigned: '已接单', picked: '已取件', delivering: '配送中', delivered: '待学生确认', completed: '已完成', cancelled: '已取消' };
 const actionName = { demo_order_created: '创建测试订单', accept: '代取员接单', assign: '人工派单', progress_picked: '已取件', progress_delivering: '开始配送', progress_delivered: '已交接', confirm: '学生确认', cancel: '学生取消', courier_approved: '代取员审核通过', courier_suspended: '代取员暂停' };
+const slotName = value => /^\d{4}-\d{2}-\d{2}T\d{2}:00:00\+08:00$/.test(value) ? `${value.slice(5, 10)} ${value.slice(11, 16)}–${String(Number(value.slice(11, 13)) + 1).padStart(2, '0')}:00` : ({ 'today-evening': '旧版：今日傍晚', 'tomorrow-noon': '旧版：明日中午' }[value] || value);
 let token = '', me = null, catalog = null, couriers = [];
 
 async function api(path, options = {}) {
@@ -57,7 +58,7 @@ function orderCard(o) {
   const privateDetails = o.handoff ? `<p>当面交接位置：${escapeHtml(o.handoff)}</p>` : '<p>接单后可查看当面交接位置</p>';
   const code = o.pickup_code ? `<p>虚构取件码：<strong>${escapeHtml(o.pickup_code)}</strong></p>` : '';
   return `<article class="card"><div class="card-head"><strong>📦 ${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)}</strong><span class="tag">${escapeHtml(statusName[o.status] || o.status)}</span></div>
-    <p>测试点：${escapeHtml(catalog.stations.find(s => s.id === o.station_id)?.name || o.station_id)} · ${o.qty} 件 · ${escapeHtml(o.slot === 'today-evening' ? '今日傍晚' : '明日中午')}</p>${privateDetails}${code}
+    <p>测试点：${escapeHtml(catalog.stations.find(s => s.id === o.station_id)?.name || o.station_id)} · ${o.qty} 件 · ${escapeHtml(slotName(o.slot))}</p>${privateDetails}${code}
     <p class="meta">订单 ${escapeHtml(o.id.slice(0, 8))} · ${escapeHtml(new Date(o.created_at).toLocaleString('zh-CN'))} · ${o.courier_id ? `代取员 ${escapeHtml(o.courier_id)}` : '尚未指派'}</p>
     <div class="card-foot"><strong>模拟报价 ¥${(o.amount_cents / 100).toFixed(2)} · 未支付</strong><div class="actions">${orderActions(o)}</div></div></article>`;
 }
@@ -71,6 +72,9 @@ async function refresh() {
     const previous = $('zone').value;
     $('zone').innerHTML = catalog.campusZones[me.campus].map(z => `<option value="${escapeHtml(z)}">${escapeHtml(z)}</option>`).join('');
     if (catalog.campusZones[me.campus].includes(previous)) $('zone').value = previous;
+    const previousSlot = $('slot').value;
+    $('slot').innerHTML = catalog.slots.map(s => `<option value="${escapeHtml(s.value)}">${escapeHtml(s.label)}</option>`).join('');
+    if (catalog.slots.some(s => s.value === previousSlot)) $('slot').value = previousSlot;
     updateHandoffPreview();
   }
   if (['admin', 'manager'].includes(me.role)) {

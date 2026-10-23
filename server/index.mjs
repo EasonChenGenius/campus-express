@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { parseDemoPickupCode } from '../web/pickup-code.js';
+import { availableSlots, validSlot } from './slots.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const campusZones = {
@@ -95,7 +96,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : url.pathname.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });
         res.end(content); return;
       }
-      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.4.1', apiContract: 1, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
+      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.4.2', apiContract: 2, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
       if (req.method === 'GET' && url.pathname === '/api/demo/accounts') return send(res, 200, fixtures.map(([id, name, role, campus]) => ({ id, name, role, campus })));
       if (req.method === 'POST' && url.pathname === '/api/demo/login') {
         const { accountId } = await bodyOf(req);
@@ -110,7 +111,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
       const user = sessionUserId && getUser(sessionUserId);
       if (!user) fail(401, '请先选择测试身份');
       if (req.method === 'GET' && url.pathname === '/api/me') return send(res, 200, user);
-      if (req.method === 'GET' && url.pathname === '/api/catalog') return send(res, 200, { campusZones, stations });
+      if (req.method === 'GET' && url.pathname === '/api/catalog') return send(res, 200, { campusZones, stations, slots: availableSlots() });
       if (req.method === 'GET' && url.pathname === '/api/orders') {
         let rows;
         if (user.role === 'student') rows = db.prepare('SELECT * FROM orders WHERE student_id=? ORDER BY created_at DESC').all(user.id);
@@ -137,7 +138,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         const station = stations.find(s => s.id === b.stationId && s.campus === user.campus);
         if (!station || b.campus !== user.campus || !campusZones[user.campus].includes(b.zone)) fail(400, '校区、苑区或测试站点无效');
         if (!Number.isInteger(b.qty) || b.qty < 1 || b.qty > 3 || !['small', 'large'].includes(b.size) || !['normal', 'urgent'].includes(b.speed)) fail(400, '包裹参数无效');
-        if (!['today-evening', 'tomorrow-noon'].includes(b.slot)) fail(400, '预约时段无效');
+        if (!validSlot(b.slot)) fail(400, '请选择未过期的白天或傍晚一小时时段（09:00–19:00）');
         if (Object.hasOwn(b, 'handoff')) fail(400, '见面位置由宿舍苑区自动确定，无需填写地址');
         const handoff = `${b.zone}楼下公共入口（测试）`;
         const pickupCode = parseDemoPickupCode(b.pickupCode);
@@ -222,5 +223,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const { port = 3000, host = '127.0.0.1' } = { port: Number(process.env.PORT || 3000) };
   if (host !== '127.0.0.1') throw Error('本地演示仅允许 127.0.0.1');
   await mkdir(join(root, 'data'), { recursive: true });
-  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.4.1 本地演示：http://${host}:${port}`));
+  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.4.2 本地演示：http://${host}:${port}`));
 }

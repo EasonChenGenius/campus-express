@@ -9,11 +9,12 @@
     <view class="field">模拟报价 ¥{{order.amountText}} · 未付款</view>
     <view class="field" wx:if="{{order.handoff}}">楼下当面交接点：{{order.handoff}}</view>
     <view class="field" wx:if="{{order.pickup_code}}">虚构取件码：{{order.pickup_code}}</view>
-    <view class="notice" wx:if="{{order.exception}}">异常待处理：{{order.exceptionReason}}。请等待本校区管理员处理。</view>
+    <view class="notice" wx:if="{{order.exception}}">异常已暂停履约：{{order.exceptionReason}}。本校区管理员核实后处理，请刷新查看结果。</view>
+    <view class="muted" wx:if="{{order.lastResolution}}">最近一次异常处理：{{order.lastResolutionText}}</view>
     <view class="muted">编号 {{order.shortId}} · {{order.createdText}}</view>
     <button class="button button-danger" wx:if="{{canCancel}}" data-action="cancel" disabled="{{busy}}" bindtap="doAction">取消测试订单</button>
     <button class="button" wx:if="{{canConfirm}}" data-action="confirm" disabled="{{busy}}" bindtap="doAction">确认收货</button>
     <button class="button" wx:if="{{canProgress}}" data-action="progress" disabled="{{busy}}" bindtap="doAction">{{nextLabel}}</button>
-    <view wx:if="{{canReport}}"><view class="label">发生异常？</view><picker range="{{reasonOptions}}" value="{{reasonIndex}}" bindchange="changeReason"><view class="control">{{reasonOptions[reasonIndex]}}</view></picker><button class="button button-secondary" data-action="exception" disabled="{{busy}}" bindtap="doAction">上报测试异常</button></view>
+    <view wx:if="{{canReport}}"><view class="label">发生异常？上报后暂停配送，由本校区管理员核实。</view><picker range="{{reasonOptions}}" value="{{reasonIndex}}" bindchange="changeReason"><view class="control">{{reasonOptions[reasonIndex]}}</view></picker><button class="button button-secondary" data-action="exception" disabled="{{busy}}" bindtap="doAction">上报测试异常</button></view>
   </view>
 </view>

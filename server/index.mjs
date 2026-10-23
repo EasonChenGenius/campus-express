@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID, randomBytes } from 'node:crypto';
+import { randomUUID, randomBytes, randomInt, scryptSync, timingSafeEqual, createHmac } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { parseDemoPickupCode } from '../web/pickup-code.js';
 import { availableSlots, validSlot } from './slots.mjs';
@@ -57,6 +57,15 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
     PRIMARY KEY(campus,slot)
   );
   CREATE INDEX IF NOT EXISTS orders_campus_slot ON orders(campus,slot,status);`);
+  db.exec(`CREATE TABLE IF NOT EXISTS demo_credentials (
+    phone TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE REFERENCES users(id),
+    password_hash TEXT NOT NULL, failed_count INTEGER NOT NULL DEFAULT 0, locked_until INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS demo_codes (
+    phone TEXT NOT NULL, purpose TEXT NOT NULL, code_hash TEXT NOT NULL,
+    expires_at INTEGER NOT NULL, sent_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(phone,purpose)
+  );`);
   const userColumns = new Set(db.prepare('PRAGMA table_info(users)').all().map(c => c.name));
   if (!userColumns.has('online')) db.exec('ALTER TABLE users ADD COLUMN online INTEGER NOT NULL DEFAULT 1');
   if (!userColumns.has('max_active')) db.exec('ALTER TABLE users ADD COLUMN max_active INTEGER NOT NULL DEFAULT 2');
@@ -64,6 +73,28 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
   for (const user of fixtures) seed.run(...user);
   const sessions = new Map();
   const sessionLifetimeMs = 30 * 60 * 1000;
+  const codeKey = randomBytes(32);
+  const validDemoPhone = phone => typeof phone === 'string' && /^TEST-1[3-9]\d{9}$/.test(phone);
+  const validPassword = value => typeof value === 'string' && value.length >= 10 && value.length <= 72 && !/\s/.test(value);
+  const passwordHash = value => { const salt = randomBytes(16).toString('hex'); return salt + ':' + scryptSync(value,salt,64).toString('hex'); };
+  const passwordMatches = (value, stored) => { const [salt,hex] = stored.split(':'); const candidate = scryptSync(value,salt,64); return timingSafeEqual(candidate,Buffer.from(hex,'hex')); };
+  const codeHash = (phone,purpose,code) => createHmac('sha256',codeKey).update(`${phone}:${purpose}:${code}`).digest('hex');
+  const issueSession = user => {
+    const token = randomBytes(32).toString('hex'), expiresAt = sessionClock() + sessionLifetimeMs;
+    sessions.set(token,{ userId: user.id, expiresAt });
+    return { token, user, expiresAt: new Date(expiresAt).toISOString() };
+  };
+  const revokeUserSessions = userId => { for (const [token,session] of sessions) if (session.userId === userId) sessions.delete(token); };
+  const consumeCode = (phone,purpose,code) => {
+    const row = db.prepare('SELECT * FROM demo_codes WHERE phone=? AND purpose=?').get(phone,purpose);
+    if (!row || row.expires_at <= sessionClock()) fail(400,'演示验证码已失效，请重新获取');
+    if (row.attempts >= 5) fail(429,'尝试次数过多，请重新获取演示验证码');
+    if (typeof code !== 'string' || !/^\d{6}$/.test(code) || !timingSafeEqual(Buffer.from(row.code_hash,'hex'),Buffer.from(codeHash(phone,purpose,code),'hex'))) {
+      db.prepare('UPDATE demo_codes SET attempts=attempts+1 WHERE phone=? AND purpose=?').run(phone,purpose);
+      fail(400,'演示验证码不正确');
+    }
+    db.prepare('DELETE FROM demo_codes WHERE phone=? AND purpose=?').run(phone,purpose);
+  };
   const sessionUser = token => {
     const session = sessions.get(token);
     if (!session) return null;
@@ -76,7 +107,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
     db.prepare('INSERT INTO audit_logs(at,actor_id,action,order_id,target_id) VALUES (?,?,?,?,?)')
       .run(new Date().toISOString(), actor, action, orderId, targetId);
   const fail = (status, message) => { const e = new Error(message); e.status = status; throw e; };
-  const errorCode = status => ({ 400: 'VALIDATION_ERROR', 401: 'UNAUTHORIZED', 403: 'FORBIDDEN', 404: 'NOT_FOUND', 405: 'METHOD_NOT_ALLOWED', 409: 'CONFLICT', 413: 'PAYLOAD_TOO_LARGE', 415: 'UNSUPPORTED_MEDIA_TYPE' }[status] || 'INTERNAL_ERROR');
+  const errorCode = status => ({ 400: 'VALIDATION_ERROR', 401: 'UNAUTHORIZED', 403: 'FORBIDDEN', 404: 'NOT_FOUND', 405: 'METHOD_NOT_ALLOWED', 409: 'CONFLICT', 413: 'PAYLOAD_TOO_LARGE', 415: 'UNSUPPORTED_MEDIA_TYPE', 429: 'TOO_MANY_REQUESTS' }[status] || 'INTERNAL_ERROR');
   const send = (res, status, value) => {
     res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
     res.end(JSON.stringify(value));
@@ -133,16 +164,73 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : url.pathname.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });
         res.end(content); return;
       }
-      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.5.3', apiContract: 6, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
+      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.6.0', apiContract: 7, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, realSms: false, closedPilotReady: false });
       if (req.method === 'GET' && url.pathname === '/api/demo/accounts') return send(res, 200, fixtures.map(([id, name, role, campus]) => ({ id, name, role, campus })));
+      if (req.method === 'POST' && url.pathname === '/api/demo/send-code') {
+        const { phone, purpose } = await bodyOf(req);
+        if (!validDemoPhone(phone) || !['register','reset'].includes(purpose)) fail(400,'只能使用 TEST- 开头的演示号码');
+        const existing = db.prepare('SELECT user_id FROM demo_credentials WHERE phone=?').get(phone);
+        if (purpose === 'register' && existing) fail(409,'该演示号码已注册，请直接登录');
+        if (purpose === 'reset' && !existing) fail(404,'该演示号码尚未注册');
+        const previous = db.prepare('SELECT sent_at FROM demo_codes WHERE phone=? AND purpose=?').get(phone,purpose);
+        if (previous && sessionClock() - previous.sent_at < 60_000) fail(429,'请等待 60 秒后再次获取演示验证码');
+        const code = String(randomInt(100000,1000000));
+        db.prepare('INSERT INTO demo_codes(phone,purpose,code_hash,expires_at,sent_at,attempts) VALUES (?,?,?,?,?,0) ON CONFLICT(phone,purpose) DO UPDATE SET code_hash=excluded.code_hash,expires_at=excluded.expires_at,sent_at=excluded.sent_at,attempts=0')
+          .run(phone,purpose,codeHash(phone,purpose,code),sessionClock()+300_000,sessionClock());
+        return send(res, 200, { demoCode: code, expiresInSeconds: 300, delivery: 'ON_PAGE_ONLY' });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/demo/register') {
+        const { phone, code, password, campus } = await bodyOf(req);
+        if (!validDemoPhone(phone) || !campusZones[campus]) fail(400,'演示号码或校区无效');
+        if (!validPassword(password)) fail(400,'演示密码须为 10–72 个非空白字符');
+        if (db.prepare('SELECT 1 FROM demo_credentials WHERE phone=?').get(phone)) fail(409,'该演示号码已注册');
+        consumeCode(phone,'register',code);
+        db.exec('BEGIN IMMEDIATE');
+        let user;
+        try {
+          const userId = `demo-student-${randomUUID()}`;
+          db.prepare('INSERT INTO users(id,name,role,campus,approved) VALUES (?,?,?,?,1)').run(userId,'学生账号（演示）','student',campus);
+          db.prepare('INSERT INTO demo_credentials(phone,user_id,password_hash) VALUES (?,?,?)').run(phone,userId,passwordHash(password));
+          user = getUser(userId);
+          db.exec('COMMIT');
+        } catch (error) { db.exec('ROLLBACK'); throw error; }
+        audit(user.id,'demo_student_registered');
+        return send(res, 201, issueSession(user));
+      }
+      if (req.method === 'POST' && url.pathname === '/api/demo/password-login') {
+        const { phone, password } = await bodyOf(req);
+        if (!validDemoPhone(phone) || !validPassword(password)) fail(401,'演示号码或密码不正确');
+        const credential = db.prepare('SELECT * FROM demo_credentials WHERE phone=?').get(phone);
+        if (!credential) fail(401,'演示号码或密码不正确');
+        if (credential.locked_until > sessionClock()) fail(429,'演示账号暂时锁定，请稍后重试或找回密码');
+        if (!passwordMatches(password,credential.password_hash)) {
+          const failed = credential.failed_count + 1;
+          db.prepare('UPDATE demo_credentials SET failed_count=?,locked_until=? WHERE phone=?').run(failed,failed >= 5 ? sessionClock()+900_000 : 0,phone);
+          fail(401,'演示号码或密码不正确');
+        }
+        db.prepare('UPDATE demo_credentials SET failed_count=0,locked_until=0 WHERE phone=?').run(phone);
+        return send(res, 200, issueSession(getUser(credential.user_id)));
+      }
+      if (req.method === 'POST' && url.pathname === '/api/demo/reset-password') {
+        const { phone, code, password } = await bodyOf(req);
+        if (!validDemoPhone(phone) || !validPassword(password)) fail(400,'演示号码或新密码无效');
+        const credential = db.prepare('SELECT user_id FROM demo_credentials WHERE phone=?').get(phone);
+        if (!credential) fail(404,'该演示号码尚未注册');
+        consumeCode(phone,'reset',code);
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          db.prepare('UPDATE demo_credentials SET password_hash=?,failed_count=0,locked_until=0 WHERE phone=?').run(passwordHash(password),phone);
+          db.exec('COMMIT');
+        } catch (error) { db.exec('ROLLBACK'); throw error; }
+        revokeUserSessions(credential.user_id);
+        audit(credential.user_id,'demo_password_reset');
+        return send(res, 200, { ok: true });
+      }
       if (req.method === 'POST' && url.pathname === '/api/demo/login') {
         const { accountId } = await bodyOf(req);
         const user = getUser(accountId);
         if (!user) fail(404, '测试账号不存在');
-        const token = randomBytes(32).toString('hex');
-        const expiresAt = sessionClock() + sessionLifetimeMs;
-        sessions.set(token, { userId: user.id, expiresAt });
-        return send(res, 200, { token, user, expiresAt: new Date(expiresAt).toISOString() });
+        return send(res, 200, issueSession(user));
       }
       const token = req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
       const sessionUserId = token && sessionUser(token);
@@ -369,5 +457,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const { port = 3000, host = '127.0.0.1' } = { port: Number(process.env.PORT || 3000) };
   if (host !== '127.0.0.1') throw Error('本地演示仅允许 127.0.0.1');
   await mkdir(join(root, 'data'), { recursive: true });
-  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.5.3 本地演示：http://${host}:${port}`));
+  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.6.0 本地演示：http://${host}:${port}`));
 }

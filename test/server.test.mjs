@@ -85,6 +85,48 @@ test('测试会话可主动退出且 30 分钟后自动失效', async t => {
   assert.equal((await request('/api/session/logout', second, 'POST')).status, 401);
 });
 
+test('演示学生可注册、密码登录、找回密码；服务端固定学生权限并撤销旧会话', async t => {
+  const { request, db } = await setup(t);
+  const phone = 'TEST-13800000001', password = 'demo-pass-1234';
+  assert.equal((await request('/api/demo/send-code', null, 'POST', { phone: '13800000001', purpose: 'register' })).status, 400);
+  const issued = await request('/api/demo/send-code', null, 'POST', { phone, purpose: 'register' });
+  assert.equal(issued.status, 200);
+  assert.equal(issued.body.delivery, 'ON_PAGE_ONLY');
+  assert.equal((await request('/api/demo/send-code', null, 'POST', { phone, purpose: 'register' })).status, 429);
+  assert.equal((await request('/api/demo/register', null, 'POST', { phone, code: '000000', password, campus: 'chenglong' })).status, 400);
+  const registered = await request('/api/demo/register', null, 'POST', { phone, code: issued.body.demoCode, password, campus: 'chenglong', role: 'admin', approved: false });
+  assert.equal(registered.status, 201);
+  assert.equal(registered.body.user.role, 'student');
+  assert.equal(registered.body.user.campus, 'chenglong');
+  assert.equal(db.prepare('SELECT password_hash FROM demo_credentials WHERE phone=?').get(phone).password_hash.includes(password), false);
+  assert.equal((await request('/api/operations/queue', registered.body.token)).status, 403);
+  assert.equal((await request('/api/demo/register', null, 'POST', { phone, code: issued.body.demoCode, password, campus: 'chenglong' })).status, 409);
+  assert.equal((await request('/api/demo/password-login', null, 'POST', { phone, password: 'wrong-pass-123' })).status, 401);
+  const login = await request('/api/demo/password-login', null, 'POST', { phone, password });
+  assert.equal(login.status, 200);
+  const resetCode = await request('/api/demo/send-code', null, 'POST', { phone, purpose: 'reset' });
+  assert.equal(resetCode.status, 200);
+  assert.equal((await request('/api/demo/reset-password', null, 'POST', { phone, code: resetCode.body.demoCode, password: 'new-demo-pass-5678' })).status, 200);
+  assert.equal((await request('/api/me', registered.body.token)).status, 401);
+  assert.equal((await request('/api/me', login.body.token)).status, 401);
+  assert.equal((await request('/api/demo/password-login', null, 'POST', { phone, password })).status, 401);
+  assert.equal((await request('/api/demo/password-login', null, 'POST', { phone, password: 'new-demo-pass-5678' })).status, 200);
+});
+
+test('演示验证码过期与错误尝试次数由后端限制', async t => {
+  let clock = Date.UTC(2026,9,23,1);
+  const { request } = await setup(t,{ sessionClock: () => clock });
+  const phone = 'TEST-13900000002', password = 'demo-pass-9876';
+  const first = await request('/api/demo/send-code', null, 'POST', { phone, purpose: 'register' });
+  assert.equal(first.status, 200);
+  clock += 300_000;
+  assert.equal((await request('/api/demo/register', null, 'POST', { phone, code: first.body.demoCode, password, campus: 'shizishan' })).status, 400);
+  const second = await request('/api/demo/send-code', null, 'POST', { phone, purpose: 'register' });
+  assert.equal(second.status, 200);
+  for (let i=0;i<5;i++) assert.equal((await request('/api/demo/register', null, 'POST', { phone, code: '000000', password, campus: 'shizishan' })).status, 400);
+  assert.equal((await request('/api/demo/register', null, 'POST', { phone, code: second.body.demoCode, password, campus: 'shizishan' })).status, 429);
+});
+
 test('代取员离线和限单由服务端执行，管理者只可调整本校区代取员', async t => {
   const { request, login, orderBody } = await setup(t);
   const [student, courier, manager, studentSZ] = await Promise.all(['student-a','runner-cl-1','manager-cl','student-b'].map(login));
@@ -236,8 +278,8 @@ test('相同请求编号只重试同一订单内容，错误响应提供稳定�
   assert.equal(unauthorized.status, 401);
   assert.equal(unauthorized.body.code, 'UNAUTHORIZED');
   const capabilities = await request('/api/capabilities');
-  assert.equal(capabilities.body.version, '0.5.3');
-  assert.equal(capabilities.body.apiContract, 6);
+  assert.equal(capabilities.body.version, '0.6.0');
+  assert.equal(capabilities.body.apiContract, 7);
   assert.equal(capabilities.body.closedPilotReady, false);
 });
 

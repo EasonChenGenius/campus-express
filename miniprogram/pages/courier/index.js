@@ -54,5 +54,5 @@ Page({
   openOrder(event) {
     wx.navigateTo({ url: '/pages/order/index?id=' + event.currentTarget.dataset.id });
   },
-  switchAccount() { getApp().clearSession(); wx.reLaunch({ url: '/pages/login/index' }); }
+  async switchAccount() { try { await api.logout(); } catch {} wx.reLaunch({ url: '/pages/login/index' }); }
 });

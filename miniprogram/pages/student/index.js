@@ -76,5 +76,5 @@ Page({
     }
   },
   openOrders() { wx.navigateTo({ url: '/pages/orders/index' }); },
-  switchAccount() { getApp().clearSession(); wx.reLaunch({ url: '/pages/login/index' }); }
+  async switchAccount() { try { await api.logout(); } catch {} wx.reLaunch({ url: '/pages/login/index' }); }
 });

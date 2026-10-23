@@ -25,6 +25,11 @@ async function perform(work, success) { try { await work(); message(success); aw
 
 async function login() {
   const entered = await perform(async () => {
+    if (token) {
+      try { await api('/api/session/logout', { method: 'POST' }); } catch {}
+      token = ''; me = null;
+      $('workspace').hidden = true;
+    }
     const result = await api('/api/demo/login', { method: 'POST', body: JSON.stringify({ accountId: $('account').value }) });
     token = result.token; me = result.user; $('workspace').hidden = false;
     $('who').textContent = me.name;

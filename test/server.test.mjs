@@ -58,8 +58,8 @@ test('同校区小时容量在并发下单时不超额，取消释放名额且�
   assert.equal((await request('/api/catalog', studentSZ)).body.slots.some(item => item.value === slot), false);
 });
 
-async function setup(t) {
-  const app = createApp({ dbPath: ':memory:' });
+async function setup(t, options = {}) {
+  const app = createApp({ dbPath: ':memory:', ...options });
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
   t.after(() => app.close());
   const base = `http://127.0.0.1:${app.server.address().port}`;
@@ -71,6 +71,19 @@ async function setup(t) {
   const orderBody = (overrides = {}) => ({ requestId: crypto.randomUUID(), campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', pickupCode: 'TEST-1234', qty: 1, size: 'small', speed: 'normal', slot: availableSlots()[0].value, ...overrides });
   return { request, login, orderBody, db: app.db };
 }
+
+test('测试会话可主动退出且 30 分钟后自动失效', async t => {
+  let clock = Date.UTC(2026, 9, 23, 1);
+  const { request, login } = await setup(t, { sessionClock: () => clock });
+  const token = await login('student-a');
+  assert.equal((await request('/api/me', token)).status, 200);
+  assert.equal((await request('/api/session/logout', token, 'POST')).status, 200);
+  assert.equal((await request('/api/me', token)).status, 401);
+  const second = await login('student-a');
+  clock += 30 * 60 * 1000;
+  assert.equal((await request('/api/me', second)).status, 401);
+  assert.equal((await request('/api/session/logout', second, 'POST')).status, 401);
+});
 
 test('代取员离线和限单由服务端执行，管理者只可调整本校区代取员', async t => {
   const { request, login, orderBody } = await setup(t);
@@ -206,8 +219,8 @@ test('相同请求编号只重试同一订单内容，错误响应提供稳定�
   assert.equal(unauthorized.status, 401);
   assert.equal(unauthorized.body.code, 'UNAUTHORIZED');
   const capabilities = await request('/api/capabilities');
-  assert.equal(capabilities.body.version, '0.5.1');
-  assert.equal(capabilities.body.apiContract, 4);
+  assert.equal(capabilities.body.version, '0.5.2');
+  assert.equal(capabilities.body.apiContract, 5);
   assert.equal(capabilities.body.closedPilotReady, false);
 });
 

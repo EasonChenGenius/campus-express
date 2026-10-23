@@ -40,7 +40,7 @@ function request(path, options = {}) {
 
 async function checkDemo() {
   const capabilities = await request('/api/capabilities', { auth: false });
-  if (capabilities.mode !== 'LOCAL_DEMO_ONLY' || capabilities.apiContract !== 4 || capabilities.realOrders || capabilities.realPayment) {
+  if (capabilities.mode !== 'LOCAL_DEMO_ONLY' || capabilities.apiContract !== 5 || capabilities.realOrders || capabilities.realPayment || capabilities.realAuthentication) {
     throw apiError('接口模式不匹配；演示小程序已停止操作。', 'UNSAFE_MODE', 0);
   }
   return capabilities;
@@ -50,6 +50,15 @@ async function login(accountId) {
   const result = await request('/api/demo/login', { method: 'POST', body: { accountId }, auth: false });
   getApp().setSession(result.token, result.user);
   return result.user;
+}
+
+async function logout() {
+  try {
+    if (getApp().globalData.token) await request('/api/session/logout', { method: 'POST' });
+  } finally {
+    wx.removeStorageSync(PENDING_KEY);
+    getApp().clearSession();
+  }
 }
 
 function requireRole(role) {
@@ -104,5 +113,5 @@ function action(id, name, body = {}) {
 }
 
 module.exports = {
-  request, checkDemo, login, requireRole, demoCode, pendingDraft, submitOrder, action
+  request, checkDemo, login, logout, requireRole, demoCode, pendingDraft, submitOrder, action
 };

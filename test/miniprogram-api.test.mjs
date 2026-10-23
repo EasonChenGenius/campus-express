@@ -52,8 +52,17 @@ test('小程序遇 401 清除身份并返回选择页；危险接口模式停止
   assert.equal(h.app.globalData.token, '');
   assert.equal(h.launches[0].url, '/pages/login/index');
 
-  const unsafe = harness(options => options.success({ statusCode: 200, data: { mode: 'PUBLIC', apiContract: 4 } }));
+  const unsafe = harness(options => options.success({ statusCode: 200, data: { mode: 'PUBLIC', apiContract: 5 } }));
   await assert.rejects(unsafe.api.checkDemo(), error => error.code === 'UNSAFE_MODE');
+});
+
+test('切换测试身份时服务端退出并清除本机身份', async () => {
+  const h = harness(options => options.success({ statusCode: 200, data: { ok: true } }));
+  await h.api.logout();
+  assert.equal(h.calls[0].url, 'http://127.0.0.1:3000/api/session/logout');
+  assert.equal(h.calls[0].header.authorization, 'Bearer ' + 'a'.repeat(64));
+  assert.equal(h.app.globalData.token, '');
+  assert.equal(h.api.pendingDraft(), null);
 });
 
 test('客户端只识别虚构取件码，服务端仍负责最终校验', () => {

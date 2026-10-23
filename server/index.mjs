@@ -27,7 +27,7 @@ const fixtures = [
 ];
 const publicColumns = 'id, student_id, campus, station_id, zone, qty, size, speed, slot, amount_cents, payment_status, status, courier_id, created_at, updated_at';
 
-export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite') } = {}) {
+export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite'), sessionClock = () => Date.now() } = {}) {
   const db = new DatabaseSync(dbPath);
   db.exec(`PRAGMA foreign_keys=ON;
     CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, campus TEXT, approved INTEGER NOT NULL, online INTEGER NOT NULL DEFAULT 1, max_active INTEGER NOT NULL DEFAULT 2);
@@ -63,6 +63,13 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
   const seed = db.prepare('INSERT OR IGNORE INTO users (id,name,role,campus,approved) VALUES (?,?,?,?,?)');
   for (const user of fixtures) seed.run(...user);
   const sessions = new Map();
+  const sessionLifetimeMs = 30 * 60 * 1000;
+  const sessionUser = token => {
+    const session = sessions.get(token);
+    if (!session) return null;
+    if (session.expiresAt <= sessionClock()) { sessions.delete(token); return null; }
+    return session.userId;
+  };
   const getUser = id => db.prepare('SELECT id,name,role,campus,approved,online,max_active FROM users WHERE id=?').get(id);
   const getOrder = id => db.prepare('SELECT * FROM orders WHERE id=?').get(id);
   const audit = (actor, action, orderId = null, targetId = null) =>
@@ -124,20 +131,25 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : url.pathname.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });
         res.end(content); return;
       }
-      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.5.1', apiContract: 4, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
+      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.5.2', apiContract: 5, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
       if (req.method === 'GET' && url.pathname === '/api/demo/accounts') return send(res, 200, fixtures.map(([id, name, role, campus]) => ({ id, name, role, campus })));
       if (req.method === 'POST' && url.pathname === '/api/demo/login') {
         const { accountId } = await bodyOf(req);
         const user = getUser(accountId);
         if (!user) fail(404, '测试账号不存在');
         const token = randomBytes(32).toString('hex');
-        sessions.set(token, user.id);
-        return send(res, 200, { token, user });
+        const expiresAt = sessionClock() + sessionLifetimeMs;
+        sessions.set(token, { userId: user.id, expiresAt });
+        return send(res, 200, { token, user, expiresAt: new Date(expiresAt).toISOString() });
       }
       const token = req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
-      const sessionUserId = token && sessions.get(token);
+      const sessionUserId = token && sessionUser(token);
       const user = sessionUserId && getUser(sessionUserId);
-      if (!user) fail(401, '请先选择测试身份');
+      if (!user) fail(401, '测试身份已失效，请重新选择');
+      if (req.method === 'POST' && url.pathname === '/api/session/logout') {
+        sessions.delete(token);
+        return send(res, 200, { ok: true });
+      }
       if (req.method === 'GET' && url.pathname === '/api/me') return send(res, 200, user);
       if (url.pathname === '/api/couriers/me/availability') {
         requireRole(user, 'courier');
@@ -350,5 +362,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const { port = 3000, host = '127.0.0.1' } = { port: Number(process.env.PORT || 3000) };
   if (host !== '127.0.0.1') throw Error('本地演示仅允许 127.0.0.1');
   await mkdir(join(root, 'data'), { recursive: true });
-  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.5.1 本地演示：http://${host}:${port}`));
+  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.5.2 本地演示：http://${host}:${port}`));
 }

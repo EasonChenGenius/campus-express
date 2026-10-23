@@ -30,7 +30,7 @@ const publicColumns = 'id, student_id, campus, station_id, zone, qty, size, spee
 export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite') } = {}) {
   const db = new DatabaseSync(dbPath);
   db.exec(`PRAGMA foreign_keys=ON;
-    CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, campus TEXT, approved INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, campus TEXT, approved INTEGER NOT NULL, online INTEGER NOT NULL DEFAULT 1, max_active INTEGER NOT NULL DEFAULT 2);
     CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY, request_id TEXT NOT NULL, student_id TEXT NOT NULL REFERENCES users(id),
       campus TEXT NOT NULL, station_id TEXT NOT NULL, zone TEXT NOT NULL, handoff TEXT NOT NULL,
@@ -43,11 +43,22 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
     CREATE TABLE IF NOT EXISTS audit_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, actor_id TEXT NOT NULL,
       action TEXT NOT NULL, order_id TEXT, target_id TEXT
-    );`);
+    );
+    CREATE TABLE IF NOT EXISTS order_exceptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, order_id TEXT NOT NULL REFERENCES orders(id),
+      reporter_id TEXT NOT NULL REFERENCES users(id), reason TEXT NOT NULL,
+      previous_status TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open',
+      resolution TEXT, created_at TEXT NOT NULL, resolved_at TEXT,
+      resolver_id TEXT REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS order_exceptions_order ON order_exceptions(order_id,status);`);
+  const userColumns = new Set(db.prepare('PRAGMA table_info(users)').all().map(c => c.name));
+  if (!userColumns.has('online')) db.exec('ALTER TABLE users ADD COLUMN online INTEGER NOT NULL DEFAULT 1');
+  if (!userColumns.has('max_active')) db.exec('ALTER TABLE users ADD COLUMN max_active INTEGER NOT NULL DEFAULT 2');
   const seed = db.prepare('INSERT OR IGNORE INTO users (id,name,role,campus,approved) VALUES (?,?,?,?,?)');
   for (const user of fixtures) seed.run(...user);
   const sessions = new Map();
-  const getUser = id => db.prepare('SELECT id,name,role,campus,approved FROM users WHERE id=?').get(id);
+  const getUser = id => db.prepare('SELECT id,name,role,campus,approved,online,max_active FROM users WHERE id=?').get(id);
   const getOrder = id => db.prepare('SELECT * FROM orders WHERE id=?').get(id);
   const audit = (actor, action, orderId = null, targetId = null) =>
     db.prepare('INSERT INTO audit_logs(at,actor_id,action,order_id,target_id) VALUES (?,?,?,?,?)')
@@ -78,6 +89,8 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
     } else if (user.role === 'admin' || user.role === 'manager') {
       base.handoff = order.handoff;
     }
+    const issue = db.prepare("SELECT id,reason,previous_status,created_at FROM order_exceptions WHERE order_id=? AND status='open' ORDER BY id DESC LIMIT 1").get(order.id);
+    if (issue) base.exception = issue;
     return base;
   };
   const canSee = (o, u) => u.role === 'admin' || (u.role === 'manager' && o.campus === u.campus)
@@ -85,6 +98,8 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
     || (u.role === 'courier' && u.approved && o.campus === u.campus && (o.status === 'pending' || o.courier_id === u.id));
   const requireRole = (user, ...roles) => { if (!roles.includes(user.role)) fail(403, '无权执行'); };
   const now = () => new Date().toISOString();
+  const activeStatuses = "'assigned','picked','delivering','delivered','exception'";
+  const activeCount = id => db.prepare(`SELECT COUNT(*) AS count FROM orders WHERE courier_id=? AND status IN (${activeStatuses})`).get(id).count;
 
   const server = createServer(async (req, res) => {
     try {
@@ -96,7 +111,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : url.pathname.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });
         res.end(content); return;
       }
-      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.4.2', apiContract: 2, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
+      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.5.0', apiContract: 3, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
       if (req.method === 'GET' && url.pathname === '/api/demo/accounts') return send(res, 200, fixtures.map(([id, name, role, campus]) => ({ id, name, role, campus })));
       if (req.method === 'POST' && url.pathname === '/api/demo/login') {
         const { accountId } = await bodyOf(req);
@@ -111,6 +126,17 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
       const user = sessionUserId && getUser(sessionUserId);
       if (!user) fail(401, '请先选择测试身份');
       if (req.method === 'GET' && url.pathname === '/api/me') return send(res, 200, user);
+      if (url.pathname === '/api/couriers/me/availability') {
+        requireRole(user, 'courier');
+        if (req.method === 'GET') return send(res, 200, { online: Boolean(user.online), approved: Boolean(user.approved), maxActive: user.max_active, activeCount: activeCount(user.id) });
+        if (req.method !== 'POST') fail(405, '不支持的操作');
+        const { online } = await bodyOf(req);
+        if (typeof online !== 'boolean') fail(400, '上线状态无效');
+        if (!user.approved && online) fail(403, '代取员尚未审核');
+        db.prepare('UPDATE users SET online=? WHERE id=?').run(online ? 1 : 0, user.id);
+        audit(user.id, online ? 'courier_online' : 'courier_offline');
+        return send(res, 200, { online, approved: Boolean(user.approved), maxActive: user.max_active, activeCount: activeCount(user.id) });
+      }
       if (req.method === 'GET' && url.pathname === '/api/catalog') return send(res, 200, { campusZones, stations, slots: availableSlots() });
       if (req.method === 'GET' && url.pathname === '/api/orders') {
         let rows;
@@ -149,25 +175,63 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         audit(user.id, 'demo_order_created', id);
         return send(res, 201, view(getOrder(id), user));
       }
-      const orderMatch = url.pathname.match(/^\/api\/orders\/([a-f0-9-]{36})(?:\/(accept|assign|progress|confirm|cancel))?$/);
+      const orderMatch = url.pathname.match(/^\/api\/orders\/([a-f0-9-]{36})(?:\/(accept|assign|progress|confirm|cancel|exception|resolve))?$/);
       if (orderMatch) {
         const [, id, action] = orderMatch;
         const o = getOrder(id);
         if (!o || !canSee(o, user)) fail(404, '订单不存在');
         if (req.method === 'GET' && !action) return send(res, 200, view(o, user));
         if (req.method !== 'POST' || !action) fail(405, '不支持的操作');
+        if (action === 'exception') {
+          const reporterAllowed = (user.role === 'courier' && o.courier_id === user.id && ['assigned', 'picked', 'delivering', 'delivered'].includes(o.status))
+            || (user.role === 'student' && o.student_id === user.id && o.status === 'delivered')
+            || (['admin', 'manager'].includes(user.role) && ['assigned', 'picked', 'delivering', 'delivered'].includes(o.status));
+          if (!reporterAllowed) fail(403, '当前身份或订单状态不能上报异常');
+          const { reason } = await bodyOf(req);
+          if (!['pickup_failed', 'damaged', 'student_unavailable', 'other'].includes(reason)) fail(400, '请选择异常类型');
+          db.exec('BEGIN IMMEDIATE');
+          try {
+            const changed = db.prepare("UPDATE orders SET status='exception',updated_at=? WHERE id=? AND status=?").run(now(),id,o.status);
+            if (!changed.changes) fail(409, '订单状态已变化，请刷新后重试');
+            db.prepare("INSERT INTO order_exceptions(order_id,reporter_id,reason,previous_status,created_at) VALUES (?,?,?,?,?)").run(id,user.id,reason,o.status,now());
+            db.exec('COMMIT');
+          } catch (error) { db.exec('ROLLBACK'); throw error; }
+          audit(user.id, 'exception_reported', id);
+          return send(res, 200, view(getOrder(id), user));
+        }
+        if (action === 'resolve') {
+          requireRole(user, 'admin', 'manager');
+          const { resolution } = await bodyOf(req);
+          const issue = db.prepare("SELECT * FROM order_exceptions WHERE order_id=? AND status='open' ORDER BY id DESC LIMIT 1").get(id);
+          if (!issue || o.status !== 'exception') fail(409, '没有待处理异常');
+          if (!['resume', 'retry', 'close'].includes(resolution)) fail(400, '处理方式无效');
+          if (resolution === 'retry' && issue.previous_status !== 'assigned') fail(400, '已取件后不能直接重新开放接单，请先核实包裹去向');
+          const nextStatus = resolution === 'resume' ? issue.previous_status : resolution === 'retry' ? 'pending' : 'cancelled';
+          db.exec('BEGIN IMMEDIATE');
+          try {
+            const changed = db.prepare("UPDATE orders SET status=?,courier_id=?,updated_at=? WHERE id=? AND status='exception'").run(nextStatus,resolution === 'retry' ? null : o.courier_id,now(),id);
+            if (!changed.changes) fail(409, '订单状态已变化，请刷新后重试');
+            db.prepare("UPDATE order_exceptions SET status='resolved',resolution=?,resolved_at=?,resolver_id=? WHERE id=? AND status='open'").run(resolution,now(),user.id,issue.id);
+            db.exec('COMMIT');
+          } catch (error) { db.exec('ROLLBACK'); throw error; }
+          audit(user.id, `exception_${resolution}`, id);
+          return send(res, 200, view(getOrder(id), user));
+        }
         let result, nextAction = action;
         if (action === 'accept') {
           requireRole(user, 'courier');
           if (!user.approved || user.campus !== o.campus) fail(403, '无权接单');
-          result = db.prepare("UPDATE orders SET status='assigned',courier_id=?,updated_at=? WHERE id=? AND status='pending' AND courier_id IS NULL").run(user.id,now(),id);
+          if (!user.online) fail(409, '请先上线接单');
+          if (activeCount(user.id) >= user.max_active) fail(409, '已达到同时处理订单上限');
+          result = db.prepare(`UPDATE orders SET status='assigned',courier_id=?,updated_at=? WHERE id=? AND status='pending' AND courier_id IS NULL AND EXISTS (SELECT 1 FROM users WHERE id=? AND approved=1 AND online=1 AND (SELECT COUNT(*) FROM orders WHERE courier_id=? AND status IN (${activeStatuses})) < max_active)`).run(user.id,now(),id,user.id,user.id);
         } else if (action === 'assign') {
           requireRole(user, 'admin', 'manager');
           if (user.role === 'manager' && user.campus !== o.campus) fail(403, '无权跨校区派单');
           const { courierId } = await bodyOf(req);
           const courier = getUser(courierId);
           if (!courier || courier.role !== 'courier' || !courier.approved || courier.campus !== o.campus) fail(400, '代取员未审核或校区不符');
-          result = db.prepare("UPDATE orders SET status='assigned',courier_id=?,updated_at=? WHERE id=? AND status='pending' AND courier_id IS NULL").run(courier.id,now(),id);
+          if (!courier.online || activeCount(courier.id) >= courier.max_active) fail(409, '代取员离线或已达接单上限');
+          result = db.prepare(`UPDATE orders SET status='assigned',courier_id=?,updated_at=? WHERE id=? AND status='pending' AND courier_id IS NULL AND EXISTS (SELECT 1 FROM users WHERE id=? AND approved=1 AND online=1 AND (SELECT COUNT(*) FROM orders WHERE courier_id=? AND status IN (${activeStatuses})) < max_active)`).run(courier.id,now(),id,courier.id,courier.id);
         } else if (action === 'progress') {
           requireRole(user, 'courier');
           if (o.courier_id !== user.id || !user.approved) fail(403, '仅本单代取员可更新');
@@ -191,8 +255,17 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
       }
       if (req.method === 'GET' && url.pathname === '/api/couriers') {
         requireRole(user, 'admin', 'manager');
-        const rows = user.role === 'admin' ? db.prepare("SELECT id,name,campus,approved FROM users WHERE role='courier'").all() : db.prepare("SELECT id,name,campus,approved FROM users WHERE role='courier' AND campus=?").all(user.campus);
+        const rows = user.role === 'admin' ? db.prepare("SELECT id,name,campus,approved,online,max_active FROM users WHERE role='courier'").all() : db.prepare("SELECT id,name,campus,approved,online,max_active FROM users WHERE role='courier' AND campus=?").all(user.campus);
+        rows.forEach(c => { c.active_count = activeCount(c.id); });
         return send(res, 200, rows);
+      }
+      if (req.method === 'GET' && url.pathname === '/api/operations/queue') {
+        requireRole(user, 'admin', 'manager');
+        const campusFilter = user.role === 'manager' ? 'AND campus=?' : '';
+        const params = user.role === 'manager' ? [user.campus] : [];
+        const exceptions = db.prepare(`SELECT * FROM orders WHERE status='exception' ${campusFilter} ORDER BY updated_at DESC`).all(...params).map(o => view(o,user));
+        const overdue = db.prepare(`SELECT * FROM orders WHERE status='pending' AND created_at<=? ${campusFilter} ORDER BY created_at ASC`).all(new Date(Date.now()-30*60000).toISOString(),...params).map(o => view(o,user));
+        return send(res, 200, { exceptions, overdue });
       }
       const approval = url.pathname.match(/^\/api\/couriers\/([a-z0-9-]+)\/approval$/);
       if (req.method === 'POST' && approval) {
@@ -201,8 +274,19 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         if (!courier || courier.role !== 'courier' || (user.role === 'manager' && user.campus !== courier.campus)) fail(404, '代取员不存在');
         const { approved } = await bodyOf(req);
         if (typeof approved !== 'boolean') fail(400, '审核值无效');
-        db.prepare('UPDATE users SET approved=? WHERE id=?').run(approved ? 1 : 0, courier.id);
+        db.prepare('UPDATE users SET approved=?,online=? WHERE id=?').run(approved ? 1 : 0, approved ? courier.online : 0, courier.id);
         audit(user.id, approved ? 'courier_approved' : 'courier_suspended', null, courier.id);
+        return send(res, 200, getUser(courier.id));
+      }
+      const capacity = url.pathname.match(/^\/api\/couriers\/([a-z0-9-]+)\/capacity$/);
+      if (req.method === 'POST' && capacity) {
+        requireRole(user, 'admin', 'manager');
+        const courier = getUser(capacity[1]);
+        if (!courier || courier.role !== 'courier' || (user.role === 'manager' && user.campus !== courier.campus)) fail(404, '代取员不存在');
+        const { maxActive } = await bodyOf(req);
+        if (!Number.isInteger(maxActive) || maxActive < 1 || maxActive > 5) fail(400, '同时处理订单上限须为 1–5');
+        db.prepare('UPDATE users SET max_active=? WHERE id=?').run(maxActive,courier.id);
+        audit(user.id, 'courier_capacity_updated', null, courier.id);
         return send(res, 200, getUser(courier.id));
       }
       if (req.method === 'GET' && url.pathname === '/api/audit') {
@@ -223,5 +307,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const { port = 3000, host = '127.0.0.1' } = { port: Number(process.env.PORT || 3000) };
   if (host !== '127.0.0.1') throw Error('本地演示仅允许 127.0.0.1');
   await mkdir(join(root, 'data'), { recursive: true });
-  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.4.2 本地演示：http://${host}:${port}`));
+  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.5.0 本地演示：http://${host}:${port}`));
 }

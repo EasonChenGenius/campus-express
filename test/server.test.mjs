@@ -3,6 +3,24 @@ import assert from 'node:assert/strict';
 import { createApp } from '../server/index.mjs';
 import { parseDemoPickupCode } from '../web/pickup-code.js';
 import { availableSlots } from '../server/slots.mjs';
+import { DatabaseSync } from 'node:sqlite';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+test('已有 V0.4 本机数据库启动时补齐接单字段和异常表', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'campus-express-migration-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const dbPath = join(dir, 'old.sqlite');
+  const old = new DatabaseSync(dbPath);
+  old.exec('CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, campus TEXT, approved INTEGER NOT NULL)');
+  old.close();
+  const app = createApp({ dbPath });
+  t.after(() => app.close());
+  assert.ok(app.db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'online'));
+  assert.ok(app.db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'max_active'));
+  assert.ok(app.db.prepare("SELECT name FROM sqlite_master WHERE name='order_exceptions'").get());
+});
 
 test('预约仅开放白天到傍晚的一小时时段，过期和夜间不可提交', async t => {
   const { request, login, orderBody } = await setup(t);
@@ -28,8 +46,48 @@ async function setup(t) {
   };
   const login = async accountId => (await request('/api/demo/login', null, 'POST', { accountId })).body.token;
   const orderBody = (overrides = {}) => ({ requestId: crypto.randomUUID(), campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', pickupCode: 'TEST-1234', qty: 1, size: 'small', speed: 'normal', slot: availableSlots()[0].value, ...overrides });
-  return { request, login, orderBody };
+  return { request, login, orderBody, db: app.db };
 }
+
+test('代取员离线和限单由服务端执行，管理者只可调整本校区代取员', async t => {
+  const { request, login, orderBody } = await setup(t);
+  const [student, courier, manager, studentSZ] = await Promise.all(['student-a','runner-cl-1','manager-cl','student-b'].map(login));
+  const first = (await request('/api/orders', student, 'POST', orderBody())).body;
+  const second = (await request('/api/orders', student, 'POST', orderBody({ pickupCode: 'TEST-5678' }))).body;
+  assert.equal((await request('/api/couriers/me/availability', courier, 'POST', { online: false })).body.online, false);
+  assert.equal((await request(`/api/orders/${first.id}/accept`, courier, 'POST')).status, 409);
+  assert.equal((await request('/api/couriers/runner-sz-1/capacity', manager, 'POST', { maxActive: 1 })).status, 404);
+  assert.equal((await request('/api/couriers/runner-cl-1/capacity', studentSZ, 'POST', { maxActive: 1 })).status, 403);
+  assert.equal((await request('/api/couriers/runner-cl-1/capacity', manager, 'POST', { maxActive: 1 })).status, 200);
+  assert.equal((await request('/api/couriers/me/availability', courier, 'POST', { online: true })).body.online, true);
+  assert.equal((await request(`/api/orders/${first.id}/accept`, courier, 'POST')).status, 200);
+  assert.equal((await request(`/api/orders/${second.id}/accept`, courier, 'POST')).status, 409);
+});
+
+test('异常上报、后台待办与处理限制，接单前仍不泄露取件码', async t => {
+  const { request, login, orderBody, db } = await setup(t);
+  const [student, courier, manager, courierSZ, admin] = await Promise.all(['student-a','runner-cl-1','manager-cl','runner-sz-1','admin'].map(login));
+  const first = (await request('/api/orders', student, 'POST', orderBody())).body;
+  const waiting = (await request('/api/orders', student, 'POST', orderBody({ pickupCode: 'TEST-5678' }))).body;
+  db.prepare('UPDATE orders SET created_at=? WHERE id=?').run(new Date(Date.now()-31*60000).toISOString(),waiting.id);
+  assert.equal((await request(`/api/orders/${first.id}/exception`, courierSZ, 'POST', { reason: 'pickup_failed' })).status, 404);
+  assert.equal((await request(`/api/orders/${first.id}/accept`, courier, 'POST')).status, 200);
+  assert.equal((await request(`/api/orders/${first.id}/exception`, courier, 'POST', { reason: 'pickup_failed' })).body.status, 'exception');
+  assert.equal((await request(`/api/orders/${first.id}/exception`, courier, 'POST', { reason: 'other' })).status, 403);
+  const queue = (await request('/api/operations/queue', manager)).body;
+  assert.equal(queue.exceptions[0].exception.reason, 'pickup_failed');
+  assert.equal(queue.overdue[0].id, waiting.id);
+  assert.equal((await request('/api/operations/queue', courier)).status, 403);
+  assert.equal((await request(`/api/orders/${first.id}/resolve`, manager, 'POST', { resolution: 'retry' })).body.status, 'pending');
+  const task = (await request('/api/orders', courier)).body.find(o => o.id === first.id);
+  assert.equal(task.pickup_code, undefined);
+  assert.equal(task.handoff, undefined);
+  assert.equal((await request(`/api/orders/${first.id}/accept`, courier, 'POST')).status, 200);
+  assert.equal((await request(`/api/orders/${first.id}/progress`, courier, 'POST', { status: 'picked' })).status, 200);
+  assert.equal((await request(`/api/orders/${first.id}/exception`, courier, 'POST', { reason: 'damaged' })).status, 200);
+  assert.equal((await request(`/api/orders/${first.id}/resolve`, admin, 'POST', { resolution: 'retry' })).status, 400);
+  assert.equal((await request(`/api/orders/${first.id}/resolve`, admin, 'POST', { resolution: 'resume' })).body.status, 'picked');
+});
 
 test('订单归属、校区隔离、敏感字段和服务端计价', async t => {
   const { request, login, orderBody } = await setup(t);
@@ -121,8 +179,8 @@ test('相同请求编号只重试同一订单内容，错误响应提供稳定�
   assert.equal(unauthorized.status, 401);
   assert.equal(unauthorized.body.code, 'UNAUTHORIZED');
   const capabilities = await request('/api/capabilities');
-  assert.equal(capabilities.body.version, '0.4.2');
-  assert.equal(capabilities.body.apiContract, 2);
+  assert.equal(capabilities.body.version, '0.5.0');
+  assert.equal(capabilities.body.apiContract, 3);
   assert.equal(capabilities.body.closedPilotReady, false);
 });
 

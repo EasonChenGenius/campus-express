@@ -2,7 +2,7 @@ const api = require('../../utils/api');
 const { decorate } = require('../../utils/display');
 
 Page({
-  data: { order: null, loading: false, busy: false, error: '', role: '', nextStatus: '', nextLabel: '', canCancel: false, canConfirm: false, canProgress: false },
+  data: { order: null, loading: false, busy: false, error: '', role: '', nextStatus: '', nextLabel: '', canCancel: false, canConfirm: false, canProgress: false, canReport: false, reasonOptions: ['取件失败','包裹破损','学生暂无法交接','其他异常'], reasonIndex: 0 },
   onLoad(options) { this.orderId = options.id; },
   onShow() {
     const user = api.requireRole();
@@ -24,7 +24,8 @@ Page({
         order, nextStatus: next ? next[0] : '', nextLabel: next ? next[1] : '',
         canCancel: this.data.role === 'student' && order.status === 'pending',
         canConfirm: this.data.role === 'student' && order.status === 'delivered',
-        canProgress: this.data.role === 'courier' && Boolean(next)
+        canProgress: this.data.role === 'courier' && Boolean(next),
+        canReport: (this.data.role === 'courier' && ['assigned','picked','delivering','delivered'].includes(order.status)) || (this.data.role === 'student' && order.status === 'delivered')
       });
     } catch (error) {
       this.setData({ error: error.message });
@@ -32,10 +33,11 @@ Page({
       this.setData({ loading: false });
     }
   },
+  changeReason(event) { this.setData({ reasonIndex: Number(event.detail.value) }); },
   async doAction(event) {
     if (this.data.busy) return;
     const name = event.currentTarget.dataset.action;
-    const body = name === 'progress' ? { status: this.data.nextStatus } : {};
+    const body = name === 'progress' ? { status: this.data.nextStatus } : name === 'exception' ? { reason: ['pickup_failed','damaged','student_unavailable','other'][this.data.reasonIndex] } : {};
     if (name === 'cancel') {
       const confirmed = await new Promise(resolve => wx.showModal({
         title: '取消测试订单？', content: '只有待接单的订单可以取消。',

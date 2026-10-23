@@ -88,6 +88,9 @@ button.danger:hover:not(:disabled){background:#f9e2d7}
 .actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
 .actions select{width:auto;max-width:210px}
 .empty{padding:38px 20px;text-align:center;border:1px dashed #d8e4d8;border-radius:12px;color:#82968a;background:#fafcf8;font-size:13px}
+.exception-note,.queue-summary{color:#80512b;background:#f8f1e7;border:1px solid #eadbc5;border-radius:10px;padding:10px 12px;font-size:12px}
+.capacity-label{display:flex;align-items:center;gap:7px;color:#567368;font-size:12px;font-weight:700}
+.capacity-label select{min-height:38px;padding:7px 9px}
 #audit{display:grid;gap:0;margin-top:12px}
 .audit-line{padding:12px 3px;border-bottom:1px solid #edf1ed;color:#557062;font-size:12px;line-height:1.6}
 .site-footer{padding:27px 0;background:#edf2eb;color:#778c7f;font-size:12px}

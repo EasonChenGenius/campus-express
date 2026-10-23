@@ -45,7 +45,7 @@ test('小程序遇 401 清除身份并返回选择页；危险接口模式停止
   assert.equal(h.app.globalData.token, '');
   assert.equal(h.launches[0].url, '/pages/login/index');
 
-  const unsafe = harness(options => options.success({ statusCode: 200, data: { mode: 'PUBLIC', apiContract: 2 } }));
+  const unsafe = harness(options => options.success({ statusCode: 200, data: { mode: 'PUBLIC', apiContract: 3 } }));
   await assert.rejects(unsafe.api.checkDemo(), error => error.code === 'UNSAFE_MODE');
 });
 

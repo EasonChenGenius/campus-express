@@ -124,9 +124,26 @@ test('异常上报、后台待办与处理限制，接单前仍不泄露取件�
   assert.equal((await request(`/api/orders/${first.id}/resolve`, admin, 'POST', { resolution: 'retry' })).status, 400);
   assert.equal((await request(`/api/orders/${first.id}/resolve`, admin, 'POST', { resolution: 'resume' })).body.status, 'picked');
   assert.equal((await request(`/api/orders/${first.id}/exception`, courier, 'POST', { reason: 'damaged' })).status, 200);
-  assert.equal((await request(`/api/orders/${first.id}/resolve`, manager, 'POST', { resolution: 'close' })).body.status, 'cancelled');
+  assert.equal((await request(`/api/orders/${first.id}/resolve`, manager, 'POST', { resolution: 'close' })).body.status, 'closed');
+  const studentView = (await request(`/api/orders/${first.id}`, student)).body;
+  assert.equal(studentView.status, 'closed');
+  assert.equal(studentView.exception, undefined);
+  assert.equal(studentView.lastResolution.reason, 'damaged');
+  assert.equal(studentView.lastResolution.resolution, 'close');
   const capacity = await request(`/api/slots/capacity?campus=chenglong`, manager);
   assert.equal(capacity.body.slots.find(item => item.value === first.slot).booked, 2);
+});
+
+test('破损不能直接重新接单，暂停资格的原代取员不能恢复进度', async t => {
+  const { request, login, orderBody } = await setup(t);
+  const [student, courier, manager] = await Promise.all(['student-a','runner-cl-1','manager-cl'].map(login));
+  const order = (await request('/api/orders', student, 'POST', orderBody())).body;
+  assert.equal((await request(`/api/orders/${order.id}/accept`, courier, 'POST')).status, 200);
+  assert.equal((await request(`/api/orders/${order.id}/exception`, courier, 'POST', { reason: 'damaged' })).status, 200);
+  assert.equal((await request(`/api/orders/${order.id}/resolve`, manager, 'POST', { resolution: 'retry' })).status, 400);
+  assert.equal((await request('/api/couriers/runner-cl-1/approval', manager, 'POST', { approved: false })).status, 200);
+  assert.equal((await request(`/api/orders/${order.id}/resolve`, manager, 'POST', { resolution: 'resume' })).status, 409);
+  assert.equal((await request(`/api/orders/${order.id}/resolve`, manager, 'POST', { resolution: 'close' })).body.status, 'closed');
 });
 
 test('订单归属、校区隔离、敏感字段和服务端计价', async t => {
@@ -219,8 +236,8 @@ test('相同请求编号只重试同一订单内容，错误响应提供稳定�
   assert.equal(unauthorized.status, 401);
   assert.equal(unauthorized.body.code, 'UNAUTHORIZED');
   const capabilities = await request('/api/capabilities');
-  assert.equal(capabilities.body.version, '0.5.2');
-  assert.equal(capabilities.body.apiContract, 5);
+  assert.equal(capabilities.body.version, '0.5.3');
+  assert.equal(capabilities.body.apiContract, 6);
   assert.equal(capabilities.body.closedPilotReady, false);
 });
 

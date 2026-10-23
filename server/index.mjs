@@ -103,6 +103,8 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
     }
     const issue = db.prepare("SELECT id,reason,previous_status,created_at FROM order_exceptions WHERE order_id=? AND status='open' ORDER BY id DESC LIMIT 1").get(order.id);
     if (issue) base.exception = issue;
+    const lastResolution = db.prepare("SELECT reason,previous_status,resolution,created_at,resolved_at FROM order_exceptions WHERE order_id=? AND status='resolved' ORDER BY id DESC LIMIT 1").get(order.id);
+    if (lastResolution) base.lastResolution = lastResolution;
     return base;
   };
   const canSee = (o, u) => u.role === 'admin' || (u.role === 'manager' && o.campus === u.campus)
@@ -131,7 +133,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : url.pathname.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });
         res.end(content); return;
       }
-      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.5.2', apiContract: 5, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
+      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.5.3', apiContract: 6, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
       if (req.method === 'GET' && url.pathname === '/api/demo/accounts') return send(res, 200, fixtures.map(([id, name, role, campus]) => ({ id, name, role, campus })));
       if (req.method === 'POST' && url.pathname === '/api/demo/login') {
         const { accountId } = await bodyOf(req);
@@ -261,7 +263,12 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
           if (!issue || o.status !== 'exception') fail(409, '没有待处理异常');
           if (!['resume', 'retry', 'close'].includes(resolution)) fail(400, '处理方式无效');
           if (resolution === 'retry' && issue.previous_status !== 'assigned') fail(400, '已取件后不能直接重新开放接单，请先核实包裹去向');
-          const nextStatus = resolution === 'resume' ? issue.previous_status : resolution === 'retry' ? 'pending' : 'cancelled';
+          if (resolution === 'retry' && issue.reason === 'damaged') fail(400, '破损异常不能直接重新开放接单，请先核实包裹状态');
+          if (resolution === 'resume' && o.courier_id) {
+            const courier = getUser(o.courier_id);
+            if (!courier?.approved) fail(409, '原代取员已暂停资格，不能恢复原进度');
+          }
+          const nextStatus = resolution === 'resume' ? issue.previous_status : resolution === 'retry' ? 'pending' : 'closed';
           db.exec('BEGIN IMMEDIATE');
           try {
             const changed = db.prepare("UPDATE orders SET status=?,courier_id=?,updated_at=? WHERE id=? AND status='exception'").run(nextStatus,resolution === 'retry' ? null : o.courier_id,now(),id);
@@ -318,7 +325,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         requireRole(user, 'admin', 'manager');
         const campusFilter = user.role === 'manager' ? 'AND campus=?' : '';
         const params = user.role === 'manager' ? [user.campus] : [];
-        const exceptions = db.prepare(`SELECT * FROM orders WHERE status='exception' ${campusFilter} ORDER BY updated_at DESC`).all(...params).map(o => view(o,user));
+        const exceptions = db.prepare(`SELECT * FROM orders WHERE status='exception' ${campusFilter} ORDER BY updated_at ASC`).all(...params).map(o => view(o,user));
         const overdue = db.prepare(`SELECT * FROM orders WHERE status='pending' AND created_at<=? ${campusFilter} ORDER BY created_at ASC`).all(new Date(Date.now()-30*60000).toISOString(),...params).map(o => view(o,user));
         return send(res, 200, { exceptions, overdue });
       }
@@ -362,5 +369,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const { port = 3000, host = '127.0.0.1' } = { port: Number(process.env.PORT || 3000) };
   if (host !== '127.0.0.1') throw Error('本地演示仅允许 127.0.0.1');
   await mkdir(join(root, 'data'), { recursive: true });
-  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.5.2 本地演示：http://${host}:${port}`));
+  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.5.3 本地演示：http://${host}:${port}`));
 }

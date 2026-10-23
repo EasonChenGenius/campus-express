@@ -3,8 +3,9 @@ import { parseDemoPickupCode } from './pickup-code.js';
 const $ = id => document.getElementById(id);
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const campusName = { chenglong: '成龙校区', shizishan: '狮子山校区' };
-const statusName = { pending: '待接单', assigned: '已接单', picked: '已取件', delivering: '配送中', delivered: '待学生确认', exception: '待处理异常', completed: '已完成', cancelled: '已取消' };
+const statusName = { pending: '待接单', assigned: '已接单', picked: '已取件', delivering: '配送中', delivered: '待学生确认', exception: '待处理异常', completed: '已完成', cancelled: '已取消', closed: '异常已关闭' };
 const reasonName = { pickup_failed: '取件失败', damaged: '包裹破损', student_unavailable: '学生暂无法交接', other: '其他异常' };
+const resolutionName = { resume: '核实后恢复原进度', retry: '确认尚未取件，重新开放接单', close: '人工关闭异常订单' };
 const actionName = { demo_order_created: '创建测试订单', accept: '代取员接单', assign: '人工派单', progress_picked: '已取件', progress_delivering: '开始配送', progress_delivered: '已交接', confirm: '学生确认', cancel: '学生取消', courier_approved: '代取员审核通过', courier_suspended: '代取员暂停', courier_online: '代取员上线', courier_offline: '代取员下线', courier_capacity_updated: '调整接单上限', exception_reported: '异常上报', exception_resume: '异常恢复', exception_retry: '重新开放接单', exception_close: '关闭异常订单' };
 const slotName = value => /^\d{4}-\d{2}-\d{2}T\d{2}:00:00\+08:00$/.test(value) ? `${value.slice(5, 10)} ${value.slice(11, 16)}–${String(Number(value.slice(11, 13)) + 1).padStart(2, '0')}:00` : ({ 'today-evening': '旧版：今日傍晚', 'tomorrow-noon': '旧版：明日中午' }[value] || value);
 let token = '', me = null, catalog = null, couriers = [], availability = null;
@@ -51,7 +52,7 @@ async function login() {
 }
 function orderActions(o) {
   if (['admin', 'manager'].includes(me.role) && o.status === 'exception') {
-    return `<button data-id="${o.id}" data-action="resolve" data-resolution="resume">恢复原进度</button>${o.exception?.previous_status === 'assigned' ? `<button class="secondary" data-id="${o.id}" data-action="resolve" data-resolution="retry">重新开放接单</button>` : ''}<button class="danger" data-id="${o.id}" data-action="resolve" data-resolution="close">关闭订单</button>`;
+    return `<button data-id="${o.id}" data-action="resolve" data-resolution="resume">核实后恢复</button>${o.exception?.previous_status === 'assigned' && o.exception.reason !== 'damaged' ? `<button class="secondary" data-id="${o.id}" data-action="resolve" data-resolution="retry">未取件，重新开放接单</button>` : ''}<button class="danger" data-id="${o.id}" data-action="resolve" data-resolution="close">人工关闭</button>`;
   }
   if (['admin', 'manager'].includes(me.role) && ['assigned', 'picked', 'delivering', 'delivered'].includes(o.status)) return exceptionControl(o);
   if (me.role === 'student') {
@@ -80,7 +81,7 @@ function orderCard(o) {
   const code = o.pickup_code ? `<p>虚构取件码：<strong>${escapeHtml(o.pickup_code)}</strong></p>` : '';
   return `<article class="card"><div class="card-head"><strong>📦 ${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)}</strong><span class="tag">${escapeHtml(statusName[o.status] || o.status)}</span></div>
     <p>测试点：${escapeHtml(catalog.stations.find(s => s.id === o.station_id)?.name || o.station_id)} · ${o.qty} 件 · ${escapeHtml(slotName(o.slot))}</p>${privateDetails}${code}
-    ${o.exception ? `<p class="exception-note">待处理：${escapeHtml(reasonName[o.exception.reason] || o.exception.reason)}；由本校区管理员处理。</p>` : ''}<p class="meta">订单 ${escapeHtml(o.id.slice(0, 8))} · ${escapeHtml(new Date(o.created_at).toLocaleString('zh-CN'))} · ${o.courier_id ? `代取员 ${escapeHtml(o.courier_id)}` : '尚未指派'}</p>
+    ${o.exception ? `<p class="exception-note">异常已暂停履约：${escapeHtml(reasonName[o.exception.reason] || o.exception.reason)}；等待本校区管理员核实。</p>` : ''}${o.lastResolution ? `<p class="meta">最近一次异常处理：${escapeHtml(reasonName[o.lastResolution.reason] || o.lastResolution.reason)} → ${escapeHtml(resolutionName[o.lastResolution.resolution] || o.lastResolution.resolution)} · ${escapeHtml(new Date(o.lastResolution.resolved_at).toLocaleString('zh-CN'))}</p>` : ''}<p class="meta">订单 ${escapeHtml(o.id.slice(0, 8))} · ${escapeHtml(new Date(o.created_at).toLocaleString('zh-CN'))} · ${o.courier_id ? `代取员 ${escapeHtml(o.courier_id)}` : '尚未指派'}</p>
     <div class="card-foot"><strong>模拟报价 ¥${(o.amount_cents / 100).toFixed(2)} · 未支付</strong><div class="actions">${orderActions(o)}</div></div></article>`;
 }
 async function refresh() {
@@ -108,7 +109,7 @@ async function refresh() {
     couriers = await api('/api/couriers');
     $('couriers').innerHTML = couriers.map(c => `<div class="card card-head"><span><strong>${escapeHtml(c.name)}</strong><br><span class="meta">${escapeHtml(campusName[c.campus])} · ${c.approved ? '已审核' : '待审核'} · ${c.online ? '在线' : '离线'} · 处理中 ${c.active_count}/${c.max_active}</span></span><div class="actions"><label class="capacity-label">上限 <select aria-label="${escapeHtml(c.name)}接单上限" data-capacity-select="${escapeHtml(c.id)}">${[1,2,3,4,5].map(n => `<option value="${n}" ${c.max_active === n ? 'selected' : ''}>${n} 单</option>`).join('')}</select></label><button class="secondary" data-courier="${escapeHtml(c.id)}" data-capacity="true">保存上限</button><button class="${c.approved ? 'danger' : ''}" data-courier="${escapeHtml(c.id)}" data-approved="${c.approved ? 'false' : 'true'}">${c.approved ? '暂停资格' : '审核通过'}</button></div></div>`).join('');
     const queue = await api('/api/operations/queue');
-    $('operations').innerHTML = `<div class="queue-summary">待处理异常 ${queue.exceptions.length} 单 · 超过 30 分钟无人接单 ${queue.overdue.length} 单</div>${queue.exceptions.map(o => `<div class="card"><strong>${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)} · ${escapeHtml(reasonName[o.exception?.reason] || '')}</strong><p class="meta">订单 ${escapeHtml(o.id.slice(0,8))} · 可在下方订单管理中恢复、改派或关闭</p></div>`).join('')}${queue.overdue.map(o => `<div class="card"><strong>${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)} · 等待接单超时</strong><p class="meta">订单 ${escapeHtml(o.id.slice(0,8))} · 可在下方订单管理中人工派单</p></div>`).join('')}${!queue.exceptions.length && !queue.overdue.length ? '<div class="empty">目前没有后台待办</div>' : ''}`;
+    $('operations').innerHTML = `<div class="queue-summary">待处理异常 ${queue.exceptions.length} 单 · 超过 30 分钟无人接单 ${queue.overdue.length} 单</div><p class="meta">处理顺序：先确认包裹是否已取出和是否安全，再决定恢复、重新接单或关闭；已取件的异常不可直接重新接单。</p>${queue.exceptions.map(o => `<div class="card"><strong>${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)} · ${escapeHtml(reasonName[o.exception?.reason] || '')}</strong><p class="meta">订单 ${escapeHtml(o.id.slice(0,8))} · 已等待 ${Math.max(0, Math.floor((Date.now() - Date.parse(o.exception?.created_at)) / 60000))} 分钟 · 在下方订单管理中处理</p></div>`).join('')}${queue.overdue.map(o => `<div class="card"><strong>${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)} · 等待接单超时</strong><p class="meta">订单 ${escapeHtml(o.id.slice(0,8))} · 可在下方订单管理中人工派单</p></div>`).join('')}${!queue.exceptions.length && !queue.overdue.length ? '<div class="empty">目前没有后台待办</div>' : ''}`;
     const slotData = await api(`/api/slots/capacity?campus=${encodeURIComponent($('slot-campus').value)}`);
     $('slot-capacities').innerHTML = slotData.slots.map(s => `<div class="card card-head"><span><strong>${escapeHtml(s.label)}</strong><br><span class="meta">已预约 ${s.booked} · 剩余 ${s.remaining}</span></span><div class="actions"><label class="capacity-label">总名额 <input type="number" min="0" max="20" step="1" value="${s.capacity}" data-slot-capacity="${escapeHtml(s.value)}"></label><button class="secondary" data-slot="${escapeHtml(s.value)}">保存</button></div></div>`).join('') || '<div class="empty">今天和明天没有未来时段</div>';
     const logs = await api('/api/audit');
@@ -139,7 +140,11 @@ async function handleClick(event) {
   if (action === 'assign') body = { courierId: document.querySelector(`[data-select="${id}"]`).value };
   if (action === 'progress') body = { status: next };
   if (action === 'exception') body = { reason: document.querySelector(`[data-reason-select="${id}"]`).value };
-  if (action === 'resolve') body = { resolution };
+  if (action === 'resolve') {
+    const warning = resolution === 'close' ? '确认已核实包裹去向并人工关闭此测试异常单？关闭后不能继续配送。' : resolution === 'retry' ? '确认代取员尚未取出包裹，并重新开放给本校区接单？' : '确认异常已核实，可以恢复原配送进度？';
+    if (!window.confirm(warning)) return;
+    body = { resolution };
+  }
   await perform(() => api(`/api/orders/${id}/${action}`, { method: 'POST', ...(body ? { body: JSON.stringify(body) } : { body: '{}' }) }), '订单状态已更新');
 }
 async function init() {

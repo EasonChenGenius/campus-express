@@ -45,6 +45,13 @@ Page({
       }));
       if (!confirmed) return;
     }
+    if (name === 'exception') {
+      const confirmed = await new Promise(resolve => wx.showModal({
+        title: '上报测试异常？', content: '上报后订单会暂停，等待本校区管理员核实。请不要在演示中填写真实个人信息。',
+        success: result => resolve(result.confirm), fail: () => resolve(false)
+      }));
+      if (!confirmed) return;
+    }
     this.setData({ busy: true, error: '' });
     try {
       await api.action(this.orderId, name, body);

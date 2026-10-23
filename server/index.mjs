@@ -52,6 +52,11 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
       resolver_id TEXT REFERENCES users(id)
     );
     CREATE INDEX IF NOT EXISTS order_exceptions_order ON order_exceptions(order_id,status);`);
+  db.exec(`CREATE TABLE IF NOT EXISTS slot_limits (
+    campus TEXT NOT NULL, slot TEXT NOT NULL, capacity INTEGER NOT NULL,
+    PRIMARY KEY(campus,slot)
+  );
+  CREATE INDEX IF NOT EXISTS orders_campus_slot ON orders(campus,slot,status);`);
   const userColumns = new Set(db.prepare('PRAGMA table_info(users)').all().map(c => c.name));
   if (!userColumns.has('online')) db.exec('ALTER TABLE users ADD COLUMN online INTEGER NOT NULL DEFAULT 1');
   if (!userColumns.has('max_active')) db.exec('ALTER TABLE users ADD COLUMN max_active INTEGER NOT NULL DEFAULT 2');
@@ -100,6 +105,14 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
   const now = () => new Date().toISOString();
   const activeStatuses = "'assigned','picked','delivering','delivered','exception'";
   const activeCount = id => db.prepare(`SELECT COUNT(*) AS count FROM orders WHERE courier_id=? AND status IN (${activeStatuses})`).get(id).count;
+  const bookedCount = (campus, slot) => db.prepare(`SELECT COUNT(*) AS count FROM orders o WHERE campus=? AND slot=? AND (
+    status<>'cancelled' OR EXISTS (SELECT 1 FROM order_exceptions e WHERE e.order_id=o.id AND e.resolution='close' AND e.previous_status IN ('picked','delivering','delivered'))
+  )`).get(campus,slot).count;
+  const slotLimit = (campus, slot) => db.prepare('SELECT capacity FROM slot_limits WHERE campus=? AND slot=?').get(campus,slot)?.capacity ?? 3;
+  const slotAvailability = campus => availableSlots().map(slot => {
+    const capacity = slotLimit(campus,slot.value), booked = bookedCount(campus,slot.value);
+    return { ...slot, capacity, booked, remaining: Math.max(0,capacity-booked) };
+  });
 
   const server = createServer(async (req, res) => {
     try {
@@ -111,7 +124,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : url.pathname.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });
         res.end(content); return;
       }
-      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.5.0', apiContract: 3, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
+      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.5.1', apiContract: 4, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, closedPilotReady: false });
       if (req.method === 'GET' && url.pathname === '/api/demo/accounts') return send(res, 200, fixtures.map(([id, name, role, campus]) => ({ id, name, role, campus })));
       if (req.method === 'POST' && url.pathname === '/api/demo/login') {
         const { accountId } = await bodyOf(req);
@@ -137,7 +150,27 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         audit(user.id, online ? 'courier_online' : 'courier_offline');
         return send(res, 200, { online, approved: Boolean(user.approved), maxActive: user.max_active, activeCount: activeCount(user.id) });
       }
-      if (req.method === 'GET' && url.pathname === '/api/catalog') return send(res, 200, { campusZones, stations, slots: availableSlots() });
+      if (req.method === 'GET' && url.pathname === '/api/catalog') return send(res, 200, { campusZones, stations, slots: user.campus ? slotAvailability(user.campus).filter(slot => slot.remaining > 0) : availableSlots() });
+      if (url.pathname === '/api/slots/capacity') {
+        requireRole(user, 'admin', 'manager');
+        if (req.method === 'GET') {
+          const campus = url.searchParams.get('campus') || user.campus;
+          if (!campusZones[campus] || (user.role === 'manager' && campus !== user.campus)) fail(403, '无权查看该校区时段');
+          return send(res, 200, { campus, slots: slotAvailability(campus) });
+        }
+        if (req.method !== 'POST') fail(405, '不支持的操作');
+        const { campus, slot, capacity } = await bodyOf(req);
+        if (!campusZones[campus] || (user.role === 'manager' && campus !== user.campus)) fail(403, '无权设置该校区时段');
+        if (!validSlot(slot) || !Number.isInteger(capacity) || capacity < 0 || capacity > 20) fail(400, '时段或容量无效');
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          if (capacity < bookedCount(campus,slot)) fail(409, '容量不能低于已预约数量');
+          db.prepare('INSERT INTO slot_limits(campus,slot,capacity) VALUES (?,?,?) ON CONFLICT(campus,slot) DO UPDATE SET capacity=excluded.capacity').run(campus,slot,capacity);
+          audit(user.id, 'slot_capacity_updated');
+          db.exec('COMMIT');
+        } catch (error) { db.exec('ROLLBACK'); throw error; }
+        return send(res, 200, slotAvailability(campus).find(item => item.value === slot));
+      }
       if (req.method === 'GET' && url.pathname === '/api/orders') {
         let rows;
         if (user.role === 'student') rows = db.prepare('SELECT * FROM orders WHERE student_id=? ORDER BY created_at DESC').all(user.id);
@@ -152,28 +185,38 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         requireRole(user, 'student');
         const b = await bodyOf(req);
         if (!/^[a-zA-Z0-9-]{8,64}$/.test(b.requestId || '')) fail(400, '缺少有效请求编号');
-        const existing = db.prepare('SELECT * FROM orders WHERE student_id=? AND request_id=?').get(user.id, b.requestId);
-        if (existing) {
-          const sameRequest = existing.campus === b.campus && existing.station_id === b.stationId
-            && existing.zone === b.zone && existing.pickup_code === parseDemoPickupCode(b.pickupCode)?.value
-            && existing.qty === b.qty && existing.size === b.size && existing.speed === b.speed && existing.slot === b.slot
-            && !Object.hasOwn(b, 'handoff');
-          if (!sameRequest) fail(409, '该请求编号已用于其他订单内容，请刷新后重试');
-          return send(res, 200, view(existing, user));
-        }
-        const station = stations.find(s => s.id === b.stationId && s.campus === user.campus);
-        if (!station || b.campus !== user.campus || !campusZones[user.campus].includes(b.zone)) fail(400, '校区、苑区或测试站点无效');
-        if (!Number.isInteger(b.qty) || b.qty < 1 || b.qty > 3 || !['small', 'large'].includes(b.size) || !['normal', 'urgent'].includes(b.speed)) fail(400, '包裹参数无效');
-        if (!validSlot(b.slot)) fail(400, '请选择未过期的白天或傍晚一小时时段（09:00–19:00）');
-        if (Object.hasOwn(b, 'handoff')) fail(400, '见面位置由宿舍苑区自动确定，无需填写地址');
-        const handoff = `${b.zone}楼下公共入口（测试）`;
-        const pickupCode = parseDemoPickupCode(b.pickupCode);
-        if (!pickupCode) fail(400, '仅接受 TEST- 开头的虚构码：数字码、货架-层-末四位或字母数字码');
-        const id = randomUUID(), at = now(), amount = (b.size === 'large' ? 500 : 300) + (b.qty - 1) * 100 + (b.speed === 'urgent' ? 200 : 0);
-        db.prepare(`INSERT INTO orders (id,request_id,student_id,campus,station_id,zone,handoff,pickup_code,qty,size,speed,slot,amount_cents,payment_status,status,courier_id,created_at,updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'demo_not_paid','pending',NULL,?,?)`).run(id,b.requestId,user.id,user.campus,station.id,b.zone,handoff,pickupCode.value,b.qty,b.size,b.speed,b.slot,amount,at,at);
-        audit(user.id, 'demo_order_created', id);
-        return send(res, 201, view(getOrder(id), user));
+        let responseStatus, responseOrder;
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          const existing = db.prepare('SELECT * FROM orders WHERE student_id=? AND request_id=?').get(user.id, b.requestId);
+          if (existing) {
+            const sameRequest = existing.campus === b.campus && existing.station_id === b.stationId
+              && existing.zone === b.zone && existing.pickup_code === parseDemoPickupCode(b.pickupCode)?.value
+              && existing.qty === b.qty && existing.size === b.size && existing.speed === b.speed && existing.slot === b.slot
+              && !Object.hasOwn(b, 'handoff');
+            if (!sameRequest) fail(409, '该请求编号已用于其他订单内容，请刷新后重试');
+            responseStatus = 200;
+            responseOrder = existing;
+          } else {
+            const station = stations.find(s => s.id === b.stationId && s.campus === user.campus);
+            if (!station || b.campus !== user.campus || !campusZones[user.campus].includes(b.zone)) fail(400, '校区、苑区或测试站点无效');
+            if (!Number.isInteger(b.qty) || b.qty < 1 || b.qty > 3 || !['small', 'large'].includes(b.size) || !['normal', 'urgent'].includes(b.speed)) fail(400, '包裹参数无效');
+            if (!validSlot(b.slot)) fail(400, '请选择未过期的白天或傍晚一小时时段（09:00–19:00）');
+            if (Object.hasOwn(b, 'handoff')) fail(400, '见面位置由宿舍苑区自动确定，无需填写地址');
+            const handoff = `${b.zone}楼下公共入口（测试）`;
+            const pickupCode = parseDemoPickupCode(b.pickupCode);
+            if (!pickupCode) fail(400, '仅接受 TEST- 开头的虚构码：数字码、货架-层-末四位或字母数字码');
+            if (bookedCount(user.campus,b.slot) >= slotLimit(user.campus,b.slot)) fail(409, '该时段已约满，请刷新后选择其他时段');
+            const id = randomUUID(), at = now(), amount = (b.size === 'large' ? 500 : 300) + (b.qty - 1) * 100 + (b.speed === 'urgent' ? 200 : 0);
+            db.prepare(`INSERT INTO orders (id,request_id,student_id,campus,station_id,zone,handoff,pickup_code,qty,size,speed,slot,amount_cents,payment_status,status,courier_id,created_at,updated_at)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'demo_not_paid','pending',NULL,?,?)`).run(id,b.requestId,user.id,user.campus,station.id,b.zone,handoff,pickupCode.value,b.qty,b.size,b.speed,b.slot,amount,at,at);
+            audit(user.id, 'demo_order_created', id);
+            responseStatus = 201;
+            responseOrder = getOrder(id);
+          }
+          db.exec('COMMIT');
+        } catch (error) { db.exec('ROLLBACK'); throw error; }
+        return send(res, responseStatus, view(responseOrder, user));
       }
       const orderMatch = url.pathname.match(/^\/api\/orders\/([a-f0-9-]{36})(?:\/(accept|assign|progress|confirm|cancel|exception|resolve))?$/);
       if (orderMatch) {
@@ -307,5 +350,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const { port = 3000, host = '127.0.0.1' } = { port: Number(process.env.PORT || 3000) };
   if (host !== '127.0.0.1') throw Error('本地演示仅允许 127.0.0.1');
   await mkdir(join(root, 'data'), { recursive: true });
-  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.5.0 本地演示：http://${host}:${port}`));
+  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.5.1 本地演示：http://${host}:${port}`));
 }

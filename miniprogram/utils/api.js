@@ -40,7 +40,7 @@ function request(path, options = {}) {
 
 async function checkDemo() {
   const capabilities = await request('/api/capabilities', { auth: false });
-  if (capabilities.mode !== 'LOCAL_DEMO_ONLY' || capabilities.apiContract !== 3 || capabilities.realOrders || capabilities.realPayment) {
+  if (capabilities.mode !== 'LOCAL_DEMO_ONLY' || capabilities.apiContract !== 4 || capabilities.realOrders || capabilities.realPayment) {
     throw apiError('接口模式不匹配；演示小程序已停止操作。', 'UNSAFE_MODE', 0);
   }
   return capabilities;
@@ -89,9 +89,14 @@ async function submitOrder(draft) {
   const fingerprint = draftFingerprint(draft);
   const requestId = old && old.fingerprint === fingerprint ? old.requestId : createRequestId();
   wx.setStorageSync(PENDING_KEY, { fingerprint, requestId, draft });
-  const order = await request('/api/orders', { method: 'POST', body: { ...draft, requestId } });
-  wx.removeStorageSync(PENDING_KEY);
-  return order;
+  try {
+    const order = await request('/api/orders', { method: 'POST', body: { ...draft, requestId } });
+    wx.removeStorageSync(PENDING_KEY);
+    return order;
+  } catch (error) {
+    if (error.status === 409) wx.removeStorageSync(PENDING_KEY);
+    throw error;
+  }
 }
 
 function action(id, name, body = {}) {

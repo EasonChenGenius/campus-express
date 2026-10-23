@@ -20,6 +20,7 @@ test('已有 V0.4 本机数据库启动时补齐接单字段和异常表', async
   assert.ok(app.db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'online'));
   assert.ok(app.db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'max_active'));
   assert.ok(app.db.prepare("SELECT name FROM sqlite_master WHERE name='order_exceptions'").get());
+  assert.ok(app.db.prepare("SELECT name FROM sqlite_master WHERE name='slot_limits'").get());
 });
 
 test('预约仅开放白天到傍晚的一小时时段，过期和夜间不可提交', async t => {
@@ -33,6 +34,28 @@ test('预约仅开放白天到傍晚的一小时时段，过期和夜间不可�
   for (const slot of ['today-evening', '2026-10-23T22:00:00+08:00', '2020-01-01T09:00:00+08:00']) {
     assert.equal((await request('/api/orders', student, 'POST', orderBody({ slot }))).status, 400);
   }
+});
+
+test('同校区小时容量在并发下单时不超额，取消释放名额且双校区独立', async t => {
+  const { request, login, orderBody } = await setup(t);
+  const [studentCL, studentSZ, manager, admin] = await Promise.all(['student-a','student-b','manager-cl','admin'].map(login));
+  const slot = (await request('/api/catalog', studentCL)).body.slots[0].value;
+  assert.equal((await request('/api/slots/capacity', manager, 'POST', { campus: 'shizishan', slot, capacity: 1 })).status, 403);
+  assert.equal((await request('/api/slots/capacity', manager, 'POST', { campus: 'chenglong', slot, capacity: 2 })).status, 200);
+  const bodies = Array.from({ length: 10 }, (_, i) => orderBody({ slot, pickupCode: `TEST-${1000+i}` }));
+  const results = await Promise.all(bodies.map(body => request('/api/orders', studentCL, 'POST', body)));
+  assert.equal(results.filter(r => r.status === 201).length, 2);
+  assert.equal(results.filter(r => r.status === 409).length, 8);
+  const winner = results.find(r => r.status === 201);
+  assert.equal((await request('/api/orders', studentCL, 'POST', bodies[results.indexOf(winner)])).body.id, winner.body.id);
+  assert.equal((await request('/api/catalog', studentCL)).body.slots.some(item => item.value === slot), false);
+  assert.equal((await request('/api/catalog', studentSZ)).body.slots.some(item => item.value === slot), true);
+  assert.equal((await request('/api/slots/capacity', manager, 'POST', { campus: 'chenglong', slot, capacity: 1 })).status, 409);
+  assert.equal((await request(`/api/orders/${winner.body.id}/cancel`, studentCL, 'POST')).status, 200);
+  assert.equal((await request('/api/catalog', studentCL)).body.slots.find(item => item.value === slot).remaining, 1);
+  assert.equal((await request('/api/orders', studentCL, 'POST', orderBody({ slot, pickupCode: 'TEST-9999' }))).status, 201);
+  assert.equal((await request('/api/slots/capacity', admin, 'POST', { campus: 'shizishan', slot, capacity: 0 })).status, 200);
+  assert.equal((await request('/api/catalog', studentSZ)).body.slots.some(item => item.value === slot), false);
 });
 
 async function setup(t) {
@@ -87,6 +110,10 @@ test('异常上报、后台待办与处理限制，接单前仍不泄露取件�
   assert.equal((await request(`/api/orders/${first.id}/exception`, courier, 'POST', { reason: 'damaged' })).status, 200);
   assert.equal((await request(`/api/orders/${first.id}/resolve`, admin, 'POST', { resolution: 'retry' })).status, 400);
   assert.equal((await request(`/api/orders/${first.id}/resolve`, admin, 'POST', { resolution: 'resume' })).body.status, 'picked');
+  assert.equal((await request(`/api/orders/${first.id}/exception`, courier, 'POST', { reason: 'damaged' })).status, 200);
+  assert.equal((await request(`/api/orders/${first.id}/resolve`, manager, 'POST', { resolution: 'close' })).body.status, 'cancelled');
+  const capacity = await request(`/api/slots/capacity?campus=chenglong`, manager);
+  assert.equal(capacity.body.slots.find(item => item.value === first.slot).booked, 2);
 });
 
 test('订单归属、校区隔离、敏感字段和服务端计价', async t => {
@@ -179,8 +206,8 @@ test('相同请求编号只重试同一订单内容，错误响应提供稳定�
   assert.equal(unauthorized.status, 401);
   assert.equal(unauthorized.body.code, 'UNAUTHORIZED');
   const capabilities = await request('/api/capabilities');
-  assert.equal(capabilities.body.version, '0.5.0');
-  assert.equal(capabilities.body.apiContract, 3);
+  assert.equal(capabilities.body.version, '0.5.1');
+  assert.equal(capabilities.body.apiContract, 4);
   assert.equal(capabilities.body.closedPilotReady, false);
 });
 

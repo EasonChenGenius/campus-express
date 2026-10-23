@@ -22,19 +22,19 @@ async function api(path, options = {}) {
   return data;
 }
 function message(text, error = false) { $('message').textContent = text; $('message').classList.toggle('error', error); }
+function authMessage(text, error = false) { $('auth-message').textContent = text; $('auth-message').classList.toggle('error', error); }
 async function perform(work, success) { try { await work(); message(success); await refresh(); return true; } catch (error) { if (error.status === 409) await refresh().catch(() => {}); message(error.message, true); return false; } }
 
-async function login() {
-  const entered = await perform(async () => {
-    if (token) {
-      try { await api('/api/session/logout', { method: 'POST' }); } catch {}
-      token = ''; me = null;
-      $('workspace').hidden = true;
-    }
-    const result = await api('/api/demo/login', { method: 'POST', body: JSON.stringify({ accountId: $('account').value }) });
+async function clearOldSession() {
+  if (!token) return;
+  try { await api('/api/session/logout', { method: 'POST' }); } catch {}
+  token = ''; me = null;
+  $('workspace').hidden = true;
+}
+function enterSession(result) {
     token = result.token; me = result.user; $('workspace').hidden = false;
     $('who').textContent = me.name;
-    $('scope').textContent = me.role === 'admin' ? '可查看双校区测试订单' : `仅限${campusName[me.campus]}测试数据`;
+    $('scope').textContent = me.role === 'admin' ? '总管理员 · 双校区测试订单' : `${{ student: '学生', courier: '代取员', manager: '校区主管' }[me.role]} · 仅限${campusName[me.campus]}测试数据`;
     $('student-create').hidden = me.role !== 'student';
     $('admin-tools').hidden = !['admin', 'manager'].includes(me.role);
     $('operations-panel').hidden = !['admin', 'manager'].includes(me.role);
@@ -47,8 +47,55 @@ async function login() {
     $('audit-panel').hidden = !['admin', 'manager'].includes(me.role);
     $('orders-title').textContent = me.role === 'student' ? '我的订单' : me.role === 'courier' ? '本校区待接单与我的任务' : '订单管理';
     $('orders-help').textContent = me.role === 'courier' ? '接单前仅下发任务摘要；成功接单后才显示虚构取件码和交接点。' : '服务端保存并校验每一步状态。';
+}
+async function login() {
+  const entered = await perform(async () => {
+    await clearOldSession();
+    enterSession(await api('/api/demo/login', { method: 'POST', body: JSON.stringify({ accountId: $('account').value }) }));
   }, '已切换测试身份');
   if (entered) $('workspace').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+async function studentAuthSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget, mode = form.id.slice(5), phone = form.elements.namedItem('phone').value.trim().toUpperCase();
+  const payload = { phone, password: form.elements.namedItem('password').value };
+  if (mode === 'register') { payload.code = form.elements.namedItem('code').value.trim(); payload.campus = form.elements.namedItem('campus').value; }
+  if (mode === 'reset') payload.code = form.elements.namedItem('code').value.trim();
+  const path = { login: 'password-login', register: 'register', reset: 'reset-password' }[mode];
+  const submit = form.querySelector('[type="submit"]');
+  submit.disabled = true;
+  try {
+    if (mode !== 'reset') await clearOldSession();
+    const result = await api(`/api/demo/${path}`, { method: 'POST', body: JSON.stringify(payload) });
+    form.reset();
+    if (mode === 'reset') {
+      await clearOldSession();
+      setAuthTab('login');
+      authMessage('演示密码已重设，旧登录已失效。请用新密码登录。');
+    } else {
+      enterSession(result);
+      await refresh();
+      authMessage(mode === 'register' ? '学生演示账号已创建并登录。' : '学生演示账号已登录。');
+      $('workspace').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  } catch (error) { authMessage(error.message, true); }
+  finally { submit.disabled = false; }
+}
+function setAuthTab(tab) {
+  for (const button of document.querySelectorAll('[data-auth-tab]')) button.classList.toggle('is-active',button.dataset.authTab === tab);
+  for (const form of document.querySelectorAll('.auth-form')) form.hidden = form.id !== `auth-${tab}`;
+  authMessage('');
+}
+async function showDemoCode(event) {
+  const purpose = event.currentTarget.dataset.codePurpose;
+  const form = $(`auth-${purpose}`), phone = form.elements.namedItem('phone').value.trim().toUpperCase();
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    const result = await api('/api/demo/send-code', { method: 'POST', body: JSON.stringify({ phone, purpose }) });
+    authMessage(`本机演示验证码：${result.demoCode}（5 分钟内有效；没有发送短信）`);
+  } catch (error) { authMessage(error.message, true); }
+  finally { button.disabled = false; }
 }
 function orderActions(o) {
   if (['admin', 'manager'].includes(me.role) && o.status === 'exception') {
@@ -150,10 +197,22 @@ async function handleClick(event) {
 async function init() {
   try {
     const accounts = await api('/api/demo/accounts');
-    $('account').innerHTML = accounts.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join('');
+    $('account').innerHTML = accounts.map(a => `<option value="${escapeHtml(a.id)}" data-role="${escapeHtml(a.role)}">${escapeHtml(a.name)} · ${{ student: '学生', courier: '代取员', manager: '校区主管', admin: '总管理员' }[a.role]}</option>`).join('');
     $('login').disabled = accounts.length === 0;
   } catch (error) { message(error.message, true); }
   $('login').addEventListener('click', login);
+  $('account').addEventListener('change', () => {
+    const role = $('account').selectedOptions[0]?.dataset.role;
+    document.querySelectorAll('.role-card').forEach(card => card.classList.toggle('is-active',card.dataset.role === role || (card.dataset.role === 'manager' && role === 'admin')));
+  });
+  document.querySelectorAll('.role-card').forEach(card => card.addEventListener('click', () => {
+    const option = [...$('account').options].find(item => item.dataset.role === card.dataset.role);
+    if (option) { $('account').value = option.value; $('account').dispatchEvent(new Event('change')); }
+    $('account').focus();
+  }));
+  document.querySelectorAll('[data-auth-tab]').forEach(button => button.addEventListener('click', () => setAuthTab(button.dataset.authTab)));
+  document.querySelectorAll('.auth-form').forEach(form => form.addEventListener('submit', studentAuthSubmit));
+  document.querySelectorAll('[data-code-purpose]').forEach(button => button.addEventListener('click', showDemoCode));
   $('refresh').addEventListener('click', () => perform(refresh, '数据已刷新'));
   $('slot-campus').addEventListener('change', () => perform(refresh, '已切换时段校区'));
   $('toggle-availability').addEventListener('click', () => perform(() => api('/api/couriers/me/availability', { method: 'POST', body: JSON.stringify({ online: !availability.online }) }), '接单状态已更新'));

@@ -12,7 +12,7 @@
 <body>
   <header class="site-header">
     <div class="shell topbar">
-      <div class="brand-lockup"><span class="brand-mark" role="img" aria-label="四川师范大学校徽"></span><div><strong>校园快取通</strong><small>CAMPUS EXPRESS · V0.5.3</small></div></div>
+      <div class="brand-lockup"><span class="brand-mark" role="img" aria-label="四川师范大学校徽"></span><div><strong>校园快取通</strong><small>CAMPUS EXPRESS · V0.6.0</small></div></div>
       <span class="header-badge"><span class="status-dot"></span> 非官方演示 · 真实支付关闭</span>
     </div>
   </header>
@@ -46,11 +46,26 @@
     </section>
 
     <main class="shell content">
-      <section class="safety-note"><span class="safety-icon" aria-hidden="true">!</span><div><strong>仅限虚构数据</strong><p>测试身份可直接切换，没有真实登录。请勿填写真实取件码、姓名、电话或宿舍房间。</p></div><span class="safety-label">LOCAL ONLY</span></section>
+      <section class="safety-note"><span class="safety-icon" aria-hidden="true">!</span><div><strong>仅限虚构数据</strong><p>测试身份可直接切换；学生账号、密码和验证码也只在本机演示。请勿填写真实手机号、常用密码、取件码或个人资料。</p></div><span class="safety-label">LOCAL ONLY</span></section>
+
+      <section class="role-guide" aria-label="体验入口">
+        <button class="role-card is-active" type="button" data-role="student"><span class="role-icon">01</span><strong>学生入口</strong><small>注册或一键体验 · 预约与订单</small></button>
+        <button class="role-card" type="button" data-role="courier"><span class="role-icon">02</span><strong>代取员入口</strong><small>审核后接单 · 进度与异常</small></button>
+        <button class="role-card" type="button" data-role="manager"><span class="role-icon">03</span><strong>管理后台</strong><small>校区主管或总管理员 · 派单与审核</small></button>
+      </section>
 
       <section class="panel identity-panel">
-        <div class="identity-copy"><span class="eyebrow">START HERE</span><h2>选择你的测试身份</h2><p>切换角色，体验学生下单、代取员履约和管理员派单。</p></div>
+        <div class="identity-copy"><span class="eyebrow">QUICK DEMO</span><h2>一键进入测试工作台</h2><p>只用于演示。学生、代取员、主管和总管理员的可见功能由服务端按角色区分。</p></div>
         <div class="identity-controls"><label for="account">测试账号</label><select id="account" aria-label="测试账号"></select><button id="login" type="button" disabled>进入演示 <span aria-hidden="true">→</span></button></div>
+      </section>
+      <section class="panel auth-panel" aria-labelledby="auth-title">
+        <div class="auth-heading"><div><span class="eyebrow">STUDENT ACCOUNT DEMO</span><h2 id="auth-title">学生账号流程演示</h2><p>体验注册、密码登录和找回密码。验证码直接显示在本机，不发送短信；只能用 <strong>TEST-</strong> 开头的虚构号码。</p></div><span class="auth-pill">未接入真实短信</span></div>
+        <div class="auth-tabs" role="tablist" aria-label="学生账号操作"><button type="button" class="auth-tab is-active" data-auth-tab="login">密码登录</button><button type="button" class="auth-tab" data-auth-tab="register">注册学生</button><button type="button" class="auth-tab" data-auth-tab="reset">找回密码</button></div>
+        <form id="auth-login" class="auth-form"><label>演示手机号<input name="phone" required placeholder="TEST-13800000001" autocomplete="off" spellcheck="false"></label><label>演示密码<input name="password" type="password" required minlength="10" autocomplete="off" placeholder="至少 10 位，勿用常用密码"></label><button type="submit">登录学生工作台 →</button></form>
+        <form id="auth-register" class="auth-form" hidden><label>演示手机号<input name="phone" required placeholder="TEST-13800000001" autocomplete="off" spellcheck="false"></label><label>所在校区<select name="campus"><option value="chenglong">成龙校区</option><option value="shizishan">狮子山校区</option></select></label><label>演示验证码<input name="code" required inputmode="numeric" maxlength="6" placeholder="点击右侧按钮获取" autocomplete="off"></label><button class="secondary auth-code-button" type="button" data-code-purpose="register">显示演示验证码</button><label class="auth-password">设置演示密码<input name="password" type="password" required minlength="10" autocomplete="off" placeholder="至少 10 位，勿用常用密码"></label><button type="submit">注册并进入学生工作台 →</button></form>
+        <form id="auth-reset" class="auth-form" hidden><label>已注册的演示手机号<input name="phone" required placeholder="TEST-13800000001" autocomplete="off" spellcheck="false"></label><label>演示验证码<input name="code" required inputmode="numeric" maxlength="6" placeholder="点击右侧按钮获取" autocomplete="off"></label><button class="secondary auth-code-button" type="button" data-code-purpose="reset">显示演示验证码</button><label>新演示密码<input name="password" type="password" required minlength="10" autocomplete="off" placeholder="至少 10 位，勿用常用密码"></label><button type="submit">重设演示密码</button></form>
+        <div id="auth-message" role="status" aria-live="polite"></div>
+        <p class="auth-footnote">代取员和管理员不能在这里自行注册权限；正式版须由微信身份绑定、人工审核与受保护的管理账号接管。</p>
       </section>
       <div id="message" role="status" aria-live="polite"></div>
 

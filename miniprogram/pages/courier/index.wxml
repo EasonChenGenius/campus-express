@@ -10,7 +10,7 @@
   <view class="card-title">本校区待接单 {{pool.length}}</view>
   <view class="muted" wx:if="{{!pool.length}}">暂无可接测试任务；未审核身份会收到拒绝提示。</view>
   <view class="card" wx:for="{{pool}}" wx:key="id">
-    <view class="row"><text class="card-title">{{item.zone}} · {{item.qty}} 件</text><text class="pill">{{item.statusName}}</text></view>
+    <view class="row"><text class="card-title">{{item.zone}}{{item.building ? ' · ' + item.building : ''}} · {{item.qty}} 件</text><text class="pill">{{item.statusName}}</text></view>
     <view>{{item.slotName}} · 模拟报价 ¥{{item.amountText}}</view>
     <view class="muted">接单前不显示取件码和交接位置 · {{item.shortId}}</view>
     <button class="button" data-id="{{item.id}}" disabled="{{busy || !canAccept}}" bindtap="accept">接单</button>
@@ -18,7 +18,7 @@
   <view class="card-title">我的任务 {{mine.length}}</view>
   <view class="muted" wx:if="{{!mine.length}}">还没有已接测试任务。</view>
   <view class="card" wx:for="{{mine}}" wx:key="id" data-id="{{item.id}}" bindtap="openOrder">
-    <view class="row"><text class="card-title">{{item.zone}} · {{item.qty}} 件</text><text class="pill">{{item.statusName}}</text></view>
+    <view class="row"><text class="card-title">{{item.zone}}{{item.building ? ' · ' + item.building : ''}} · {{item.qty}} 件</text><text class="pill">{{item.statusName}}</text></view>
     <view class="muted">订单 {{item.shortId}} · 点击查看详情与更新进度</view>
   </view>
 </view>

@@ -8,7 +8,7 @@
   <view class="error" wx:if="{{error}}">{{error}}</view>
   <view class="muted" wx:if="{{empty}}">还没有测试订单。</view>
   <view class="card" wx:for="{{orders}}" wx:key="id" data-id="{{item.id}}" bindtap="openOrder">
-    <view class="row"><text class="card-title">{{item.campusName}} · {{item.zone}}</text><text class="pill">{{item.statusName}}</text></view>
+    <view class="row"><text class="card-title">{{item.campusName}} · {{item.zone}}{{item.building ? ' · ' + item.building : ''}}</text><text class="pill">{{item.statusName}}</text></view>
     <view>{{item.qty}} 件 · {{item.slotName}} · 模拟报价 ¥{{item.amountText}}</view>
     <view class="muted">订单 {{item.shortId}} · 未付款 · 点击查看详情</view>
   </view>

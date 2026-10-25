@@ -3,7 +3,7 @@ const { campus } = require('../../utils/display');
 
 Page({
   data: {
-    campusName: '', stations: [], zones: [], stationIndex: 0, zoneIndex: 0,
+    campusName: '', stations: [], zones: [], buildingsByZone: {}, buildings: [], stationIndex: 0, zoneIndex: 0, buildingIndex: 0,
     qtyOptions: [1, 2, 3], qtyIndex: 0,
     sizeOptions: ['小件', '大件'], sizeIndex: 0,
     speedOptions: ['普通', '加急'], speedIndex: 0,
@@ -22,15 +22,18 @@ Page({
       const pending = api.pendingDraft();
       const draft = pending && pending.draft.campus === user.campus ? pending.draft : null;
       const zoneIndex = draft ? Math.max(0, zones.indexOf(draft.zone)) : 0;
+      const buildingsByZone = catalog.campusBuildings?.[user.campus] || {};
+      const buildings = buildingsByZone[zones[zoneIndex]] || [];
+      const buildingIndex = draft ? Math.max(0, buildings.indexOf(draft.building)) : 0;
       this.setData({
-        stations, zones, slots, slotOptions: slots.map(item => item.label + ' · 剩余 ' + item.remaining + ' 个名额'), zoneIndex,
+        stations, zones, buildingsByZone, buildings, buildingIndex, slots, slotOptions: slots.map(item => item.label + ' · 剩余 ' + item.remaining + ' 个名额'), zoneIndex,
         stationIndex: draft ? Math.max(0, stations.findIndex(s => s.id === draft.stationId)) : 0,
         qtyIndex: draft ? Math.max(0, [1, 2, 3].indexOf(draft.qty)) : 0,
         sizeIndex: draft && draft.size === 'large' ? 1 : 0,
         speedIndex: draft && draft.speed === 'urgent' ? 1 : 0,
         slotIndex: draft ? Math.max(0, slots.findIndex(item => item.value === draft.slot)) : 0,
         pickupCode: draft ? draft.pickupCode : '',
-        handoff: zones[zoneIndex] ? zones[zoneIndex] + '楼下公共入口（测试）' : '',
+        handoff: zones[zoneIndex] ? zones[zoneIndex] + (buildings[buildingIndex] || '') + '楼下公共入口（演示位置，待核实）' : '',
         pendingHint: Boolean(draft)
       });
     } catch (error) {
@@ -41,7 +44,12 @@ Page({
     const field = event.currentTarget.dataset.field;
     const index = Number(event.detail.value);
     this.setData({ [field]: index, error: '' });
-    if (field === 'zoneIndex') this.setData({ handoff: this.data.zones[index] + '楼下公共入口（测试）' });
+    if (field === 'zoneIndex') {
+      const zone = this.data.zones[index];
+      const buildings = this.data.buildingsByZone[zone] || [];
+      this.setData({ buildings, buildingIndex: 0, handoff: zone + (buildings[0] || '') + '楼下公共入口（演示位置，待核实）' });
+    }
+    if (field === 'buildingIndex') this.setData({ handoff: this.data.zones[this.data.zoneIndex] + this.data.buildings[index] + '楼下公共入口（演示位置，待核实）' });
   },
   changeCode(event) {
     this.setData({ pickupCode: event.detail.value, error: '' });
@@ -57,6 +65,7 @@ Page({
       campus: user.campus,
       stationId: this.data.stations[this.data.stationIndex].id,
       zone: this.data.zones[this.data.zoneIndex],
+      building: this.data.buildings[this.data.buildingIndex] || null,
       pickupCode,
       qty: this.data.qtyOptions[this.data.qtyIndex],
       size: this.data.sizeIndex ? 'large' : 'small',

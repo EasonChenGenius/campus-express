@@ -126,7 +126,7 @@ function exceptionControl(o) {
 function orderCard(o) {
   const privateDetails = o.handoff ? `<p>当面交接位置：${escapeHtml(o.handoff)}</p>` : '<p>接单后可查看当面交接位置</p>';
   const code = o.pickup_code ? `<p>虚构取件码：<strong>${escapeHtml(o.pickup_code)}</strong></p>` : '';
-  return `<article class="card"><div class="card-head"><strong>📦 ${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)}</strong><span class="tag">${escapeHtml(statusName[o.status] || o.status)}</span></div>
+  return `<article class="card"><div class="card-head"><strong>📦 ${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)}${o.building ? ' · ' + escapeHtml(o.building) : ''}</strong><span class="tag">${escapeHtml(statusName[o.status] || o.status)}</span></div>
     <p>测试点：${escapeHtml(catalog.stations.find(s => s.id === o.station_id)?.name || o.station_id)} · ${o.qty} 件 · ${escapeHtml(slotName(o.slot))}</p>${privateDetails}${code}
     ${o.exception ? `<p class="exception-note">异常已暂停履约：${escapeHtml(reasonName[o.exception.reason] || o.exception.reason)}；等待本校区管理员核实。</p>` : ''}${o.lastResolution ? `<p class="meta">最近一次异常处理：${escapeHtml(reasonName[o.lastResolution.reason] || o.lastResolution.reason)} → ${escapeHtml(resolutionName[o.lastResolution.resolution] || o.lastResolution.resolution)} · ${escapeHtml(new Date(o.lastResolution.resolved_at).toLocaleString('zh-CN'))}</p>` : ''}<p class="meta">订单 ${escapeHtml(o.id.slice(0, 8))} · ${escapeHtml(new Date(o.created_at).toLocaleString('zh-CN'))} · ${o.courier_id ? `代取员 ${escapeHtml(o.courier_id)}` : '尚未指派'}</p>
     <div class="card-foot"><strong>模拟报价 ¥${(o.amount_cents / 100).toFixed(2)} · 未支付</strong><div class="actions">${orderActions(o)}</div></div></article>`;
@@ -172,7 +172,7 @@ async function createOrder(event) {
   event.preventDefault();
   const code = parseDemoPickupCode($('pickup-code').value);
   if (!code) return message('请输入虚构测试码，例如 TEST-123456、TEST-5-2-0042 或 TEST-9VK518', true);
-  const body = { requestId: crypto.randomUUID(), campus: me.campus, stationId: $('station').value, zone: $('zone').value, pickupCode: code.value, qty: Number($('qty').value), size: $('size').value, speed: $('speed').value, slot: $('slot').value };
+  const body = { requestId: crypto.randomUUID(), campus: me.campus, stationId: $('station').value, zone: $('zone').value, building: $('building').value || null, pickupCode: code.value, qty: Number($('qty').value), size: $('size').value, speed: $('speed').value, slot: $('slot').value };
   await perform(async () => { await api('/api/orders', { method: 'POST', body: JSON.stringify(body) }); $('order-form').reset(); }, '测试订单已创建；没有付款或真实配送');
 }
 async function handleClick(event) {
@@ -218,10 +218,18 @@ async function init() {
   $('toggle-availability').addEventListener('click', () => perform(() => api('/api/couriers/me/availability', { method: 'POST', body: JSON.stringify({ online: !availability.online }) }), '接单状态已更新'));
   $('order-form').addEventListener('submit', createOrder);
   $('zone').addEventListener('change', updateHandoffPreview);
+  $('building').addEventListener('change', updateHandoffPreview);
   $('workspace').addEventListener('click', handleClick);
 }
 init();
 
 function updateHandoffPreview() {
-  $('handoff-preview').textContent = `${$('zone').value}楼下公共入口（测试）`;
+  const zone = $('zone').value;
+  const buildings = catalog?.campusBuildings?.[me?.campus]?.[zone] || [];
+  const previous = $('building').value;
+  $('building').innerHTML = buildings.length ? buildings.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('') : '<option value="">楼号待核实（仅苑区演示）</option>';
+  if (buildings.includes(previous)) $('building').value = previous;
+  $('building').disabled = !buildings.length;
+  $('building-hint').textContent = buildings.length ? '东1—东13 为用户提供的待核实范围。' : '该苑区楼号尚未核实，暂按苑区演示。';
+  $('handoff-preview').textContent = `${zone}${$('building').value}楼下公共入口（演示位置，待核实）`;
 }

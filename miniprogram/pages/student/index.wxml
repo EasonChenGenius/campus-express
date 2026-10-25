@@ -16,6 +16,10 @@
         <view class="control">{{zones.length ? zones[zoneIndex] : '暂无苑区'}}</view>
       </picker>
     </view>
+    <view class="field" wx:if="{{buildings.length}}"><text class="label">宿舍楼栋</text>
+      <picker range="{{buildings}}" value="{{buildingIndex}}" data-field="buildingIndex" bindchange="changePicker"><view class="control">{{buildings[buildingIndex]}}</view></picker>
+    </view>
+    <view class="muted" wx:else>该苑区楼号待核实，暂按苑区演示。</view>
     <view class="muted">当面交接点：{{handoff}}</view>
     <view class="field"><text class="label">虚构取件码</text>
       <input class="control" value="{{pickupCode}}" placeholder="例如 TEST-123456" maxlength="24" bindinput="changeCode"/>

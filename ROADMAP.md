@@ -1,6 +1,6 @@
 # 产品路线图（按优先级）
 
-**2026-10-23 状态：** V0.6.0 已有本机后端、分层网页工作台与学生/代取员原生微信小程序开发演示，并加入学生注册/密码找回的虚构账号流程、异常留痕、接单上限、双校区小时容量和可撤销的演示会话。下列勾选框仍按“真实业务可上线”标准判断，测试账号、虚构站点和模拟报价不计为正式完成。当前接口见 [V0.6 契约](docs/V0.6_API_CONTRACT.md)，账号流程见 [网页演示说明](docs/WEB_AUTH_DEMO.md)，异常流程见 [处理说明](docs/EXCEPTION_WORKFLOW.md)，设计参考见 [GitHub 小程序作品](docs/MINIPROGRAM_DESIGN_REFERENCES.md)，试用门槛见 [封闭试用准备清单](docs/CLOSED_PILOT_READINESS.md)。
+**2026-10-24 状态：** V0.6.1 已有本机后端、分层网页工作台与学生/代取员原生微信小程序开发演示，并加入学生注册/密码找回的虚构账号流程、异常留痕、接单上限、双校区小时容量和可撤销的演示会话。东苑东1—东13 已作为待核实楼栋演示选项；西苑楼号和具体交接点待确认。下列勾选框仍按“真实业务可上线”标准判断，测试账号、虚构站点和模拟报价不计为正式完成。当前接口见 [V0.6.1 契约](docs/V0.6.1_API_CONTRACT.md)，账号流程见 [网页演示说明](docs/WEB_AUTH_DEMO.md)，异常流程见 [处理说明](docs/EXCEPTION_WORKFLOW.md)，楼栋核对见 [清单](docs/BUILDING_VERIFICATION.md)，设计参考见 [GitHub 小程序作品](docs/MINIPROGRAM_DESIGN_REFERENCES.md)，试用门槛见 [封闭试用准备清单](docs/CLOSED_PILOT_READINESS.md)。
 
 ## P0：试点合法性与安全（上线阻断项）
 

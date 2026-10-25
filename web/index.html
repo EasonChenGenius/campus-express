@@ -12,7 +12,7 @@
 <body>
   <header class="site-header">
     <div class="shell topbar">
-      <div class="brand-lockup"><span class="brand-mark" role="img" aria-label="四川师范大学校徽"></span><div><strong>校园快取通</strong><small>CAMPUS EXPRESS · V0.6.0</small></div></div>
+      <div class="brand-lockup"><span class="brand-mark" role="img" aria-label="四川师范大学校徽"></span><div><strong>校园快取通</strong><small>CAMPUS EXPRESS · V0.6.1</small></div></div>
       <span class="header-badge"><span class="status-dot"></span> 非官方演示 · 真实支付关闭</span>
     </div>
   </header>
@@ -86,7 +86,8 @@
                 <!-- Pickup and delivery fields adapted from coderwyx's MIT-licensed order form; see docs/THIRD_PARTY_NOTICES.md. -->
                 <label>从哪里取？<select id="station"></select></label>
                 <label>送到哪个宿舍苑区？<select id="zone"></select></label>
-                <div class="handoff-box"><div><strong>楼下当面交接</strong><p>代取员会在宿舍苑区公共入口与你交接。这里不是快递驿站，也不需要填写房间号。</p></div><span id="handoff-preview"></span></div>
+                <label>宿舍楼栋<select id="building"></select><small id="building-hint">东苑楼号由你提供，交接位置仍待核实。</small></label>
+                <div class="handoff-box"><div><strong>楼下当面交接</strong><p>这里展示待核实的演示位置。请勿填写房间号；正式交接点要先征得授权并现场确认。</p></div><span id="handoff-preview"></span></div>
               </div>
             </div>
             <div class="form-section"><div class="form-section-title"><span>②</span><div><strong>包裹与时段</strong><small>只填写 TEST- 开头的虚构取件码</small></div></div>

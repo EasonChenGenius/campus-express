@@ -21,6 +21,7 @@ test('已有 V0.4 本机数据库启动时补齐接单字段和异常表', async
   assert.ok(app.db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'max_active'));
   assert.ok(app.db.prepare("SELECT name FROM sqlite_master WHERE name='order_exceptions'").get());
   assert.ok(app.db.prepare("SELECT name FROM sqlite_master WHERE name='slot_limits'").get());
+  assert.ok(app.db.prepare('PRAGMA table_info(orders)').all().some(c => c.name === 'building'));
 });
 
 test('预约仅开放白天到傍晚的一小时时段，过期和夜间不可提交', async t => {
@@ -34,6 +35,27 @@ test('预约仅开放白天到傍晚的一小时时段，过期和夜间不可�
   for (const slot of ['today-evening', '2026-10-23T22:00:00+08:00', '2020-01-01T09:00:00+08:00']) {
     assert.equal((await request('/api/orders', student, 'POST', orderBody({ slot }))).status, 400);
   }
+});
+
+test('东苑楼栋仅接受东1—东13，西苑暂不猜楼号，接单前隐藏具体楼栋', async t => {
+  const { request, login, orderBody } = await setup(t);
+  const student = await login('student-a');
+  const runner = await login('runner-cl-1');
+  const catalog = (await request('/api/catalog', student)).body;
+  assert.deepEqual(catalog.campusBuildings.chenglong['东苑'], Array.from({ length: 13 }, (_, i) => `东${i + 1}`));
+  assert.deepEqual(catalog.campusBuildings.chenglong['西苑'], []);
+  for (const building of ['东0', '东14', '西1', '东1-101']) {
+    assert.equal((await request('/api/orders', student, 'POST', orderBody({ building }))).status, 400);
+  }
+  const created = await request('/api/orders', student, 'POST', orderBody({ building: '东13' }));
+  assert.equal(created.status, 201);
+  assert.equal(created.body.handoff, '东苑东13楼下公共入口（演示位置，待核实）');
+  const pending = (await request('/api/orders', runner)).body.find(o => o.id === created.body.id);
+  assert.equal(pending.building, undefined);
+  assert.equal(pending.handoff, undefined);
+  assert.equal((await request(`/api/orders/${created.body.id}/accept`, runner, 'POST')).body.building, '东13');
+  assert.equal((await request('/api/orders', student, 'POST', orderBody({ zone: '西苑', building: '西1' }))).status, 400);
+  assert.equal((await request('/api/orders', student, 'POST', orderBody({ zone: '西苑', building: null }))).status, 201);
 });
 
 test('同校区小时容量在并发下单时不超额，取消释放名额且双校区独立', async t => {
@@ -68,7 +90,7 @@ async function setup(t, options = {}) {
     return { status: response.status, body: await response.json() };
   };
   const login = async accountId => (await request('/api/demo/login', null, 'POST', { accountId })).body.token;
-  const orderBody = (overrides = {}) => ({ requestId: crypto.randomUUID(), campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', pickupCode: 'TEST-1234', qty: 1, size: 'small', speed: 'normal', slot: availableSlots()[0].value, ...overrides });
+  const orderBody = (overrides = {}) => ({ requestId: crypto.randomUUID(), campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', building: overrides.zone && overrides.zone !== '东苑' ? null : '东1', pickupCode: 'TEST-1234', qty: 1, size: 'small', speed: 'normal', slot: availableSlots()[0].value, ...overrides });
   return { request, login, orderBody, db: app.db };
 }
 
@@ -224,7 +246,7 @@ test('20 个接单请求只有一次成功，状态流转与审计记录正确',
   assert.equal((await request(`/api/orders/${order.id}/assign`, admin, 'POST', { courierId: 'runner-cl-1' })).status, 409);
   const accepted = (await request(`/api/orders/${order.id}`, courier)).body;
   assert.equal(accepted.pickup_code, 'TEST-1234');
-  assert.equal(accepted.handoff, '东苑楼下公共入口（测试）');
+  assert.equal(accepted.handoff, '东苑东1楼下公共入口（演示位置，待核实）');
   assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status: 'delivered' })).status, 409);
   for (const status of ['picked', 'delivering', 'delivered']) assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status })).status, 200);
   assert.equal((await request(`/api/orders/${order.id}/confirm`, student, 'POST')).body.status, 'completed');
@@ -278,8 +300,8 @@ test('相同请求编号只重试同一订单内容，错误响应提供稳定�
   assert.equal(unauthorized.status, 401);
   assert.equal(unauthorized.body.code, 'UNAUTHORIZED');
   const capabilities = await request('/api/capabilities');
-  assert.equal(capabilities.body.version, '0.6.0');
-  assert.equal(capabilities.body.apiContract, 7);
+  assert.equal(capabilities.body.version, '0.6.1');
+  assert.equal(capabilities.body.apiContract, 8);
   assert.equal(capabilities.body.closedPilotReady, false);
 });
 

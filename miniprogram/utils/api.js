@@ -40,7 +40,7 @@ function request(path, options = {}) {
 
 async function checkDemo() {
   const capabilities = await request('/api/capabilities', { auth: false });
-  if (capabilities.mode !== 'LOCAL_DEMO_ONLY' || capabilities.apiContract !== 7 || capabilities.realOrders || capabilities.realPayment || capabilities.realAuthentication || capabilities.realSms) {
+  if (capabilities.mode !== 'LOCAL_DEMO_ONLY' || capabilities.apiContract !== 8 || capabilities.realOrders || capabilities.realPayment || capabilities.realAuthentication || capabilities.realSms) {
     throw apiError('接口模式不匹配；演示小程序已停止操作。', 'UNSAFE_MODE', 0);
   }
   return capabilities;
@@ -80,7 +80,7 @@ function demoCode(input) {
 }
 
 function draftFingerprint(draft) {
-  return JSON.stringify([draft.campus, draft.stationId, draft.zone, draft.pickupCode,
+  return JSON.stringify([draft.campus, draft.stationId, draft.zone, draft.building, draft.pickupCode,
     draft.qty, draft.size, draft.speed, draft.slot]);
 }
 

@@ -95,8 +95,16 @@ async function setup(t, options = {}) {
   };
   const login = async accountId => (await request('/api/demo/login', null, 'POST', { accountId })).body.token;
   const orderBody = (overrides = {}) => ({ requestId: crypto.randomUUID(), campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', building: overrides.zone && overrides.zone !== '东苑' ? null : '东1', pickupCode: 'TEST-1234', qty: 1, size: 'small', speed: 'normal', slot: availableSlots()[0].value, ...overrides });
-  return { request, login, orderBody, db: app.db };
+  return { request, login, orderBody, db: app.db, base };
 }
+
+test('本机网页可读取新主题样式', async t => {
+  const { base } = await setup(t);
+  const response = await fetch(`${base}/theme.css`);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type'), /text\/css/);
+  assert.match(await response.text(), /\.workspace-nav/);
+});
 
 test('测试会话可主动退出且 30 分钟后自动失效', async t => {
   let clock = Date.UTC(2026, 9, 23, 1);

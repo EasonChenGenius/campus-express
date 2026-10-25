@@ -29,7 +29,8 @@ const fixtures = [
 ];
 const publicColumns = 'id, student_id, campus, station_id, zone, building, qty, size, speed, slot, amount_cents, payment_status, status, courier_id, created_at, updated_at';
 
-export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite'), sessionClock = () => Date.now() } = {}) {
+export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite'), sessionClock = () => Date.now(), runtimeMode = process.env.NODE_ENV || 'development' } = {}) {
+  if (!['development', 'test'].includes(runtimeMode)) throw Error('本机演示服务禁止在正式环境启动；请先完成可信身份与试用安全验收');
   const db = new DatabaseSync(dbPath);
   db.exec(`PRAGMA foreign_keys=ON;
     CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, campus TEXT, approved INTEGER NOT NULL, online INTEGER NOT NULL DEFAULT 1, max_active INTEGER NOT NULL DEFAULT 2);

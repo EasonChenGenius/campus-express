@@ -8,6 +8,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+test('本机演示服务拒绝正式环境启动', () => {
+  assert.throws(() => createApp({ dbPath: ':memory:', runtimeMode: 'production' }), /禁止在正式环境启动/);
+});
+
 test('已有 V0.4 本机数据库启动时补齐接单字段和异常表', async t => {
   const dir = await mkdtemp(join(tmpdir(), 'campus-express-migration-'));
   t.after(() => rm(dir, { recursive: true, force: true }));

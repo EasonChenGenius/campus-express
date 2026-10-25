@@ -14,6 +14,8 @@
 
 异常上报、暂停、核实及处理结果说明见[异常处理流程](docs/EXCEPTION_WORKFLOW.md)。演示版需要人工刷新查看结果，目前没有自动通知、客服或退款。
 
+下一轮的任务顺序、外部依赖和逐项验收证据见[推进清单](docs/NEXT_ROUND_DEPENDENCIES.md)；先用[站点核验空表](docs/STATION_VERIFICATION_TEMPLATE.md)与[身份权限矩阵](docs/IDENTITY_PERMISSION_MATRIX.md)准备材料。表格是待办模板，不代表学校或站点已授权。
+
 电脑网页现将学生、代取员和管理后台入口分开说明，同时保留一键测试身份。学生还可用 `TEST-13800000001` 这类**虚构号码**体验注册、密码登录和找回密码；验证码直接显示在本机页面，不发送短信。请勿填写真实手机号或常用密码。步骤和权限边界见[网页账号演示说明](docs/WEB_AUTH_DEMO.md)，接口见 [V0.6 契约](docs/V0.6_API_CONTRACT.md)。小程序界面参考及截图见[GitHub 设计参考](docs/MINIPROGRAM_DESIGN_REFERENCES.md)。
 
 ## 在微信开发者工具体验 V0.5

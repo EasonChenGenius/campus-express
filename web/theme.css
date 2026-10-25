@@ -1,0 +1,111 @@
+/* Campus Express demo theme: a compact card layout with calm lilac and mint. */
+:root{color:#26314b;background:#f6f7fc;--ink:#26314b;--muted:#5b6981;--primary:#4b548e;--primary-deep:#394474;--line:#dfe4f0;--paper:#fff;--soft:#edf0fb;--mint:#e7f3ef}
+html{scroll-padding-top:24px}
+body{background:#f6f7fc;color:var(--ink)}
+button,a,select,input{touch-action:manipulation}
+button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #8d9be3;outline-offset:3px}
+.skip-link{position:absolute;left:12px;top:-60px;z-index:20;background:#fff;padding:10px 14px;border-radius:8px;color:var(--primary-deep)}
+.skip-link:focus{top:12px}
+.site-header{background:#fff;border-bottom:1px solid var(--line);color:var(--ink)}
+.brand-lockup small{color:#65748b}
+.brand-mark{box-shadow:0 0 0 2px #fff,0 4px 12px #34437222}
+.header-badge{background:#f1f3fb;border-color:#d8dfef;color:#45527c}
+.status-dot{background:#618f83;box-shadow:0 0 0 3px #618f8325}
+.hero{background:linear-gradient(112deg,#eceefd 0%,#eaf2fb 56%,#e7f3ee 100%);color:var(--ink)}
+.hero:after{border-color:#b9c5e777;box-shadow:0 0 0 76px #b9c5e721,0 0 0 150px #b9c5e711}
+.hero-grid{padding-block:52px 56px;gap:45px}
+.hero-kicker,.eyebrow{color:#59689a}
+.kicker-line{background:#7584b3}
+.hero h1{color:#25314c}
+.hero h1 em{color:var(--primary)}
+.hero-copy>p:not(.hero-kicker){color:#4e5d76;margin:18px 0 18px}
+.hero-chips span{background:#ffffffb5;border-color:#cdd7ea;color:#485779}
+.hero-cta{display:inline-flex;align-items:center;gap:18px;background:var(--primary);color:#fff;text-decoration:none;font-weight:800;border-radius:12px;padding:13px 18px;margin-top:22px;box-shadow:0 8px 20px #46548f25}
+.hero-cta:hover{background:var(--primary-deep)}
+.flow-card{background:#fff;color:var(--ink);border-color:#dce4f0;box-shadow:0 20px 42px #46548f14;transform:none}
+.flow-card-head,.flow-step{border-bottom-color:#e7ebf3}
+.flow-live,.flow-number,.flow-icon{color:#587e96}
+.flow-step small{color:#69788d}
+.flow-card-foot{background:#f1f4fa;color:#566781}
+.content{padding-block:22px 76px}
+.role-guide{scroll-margin-top:24px}
+.role-card{color:var(--ink);border-color:var(--line);box-shadow:0 8px 22px #3443720b}
+.role-card:hover:not(:disabled),.role-card.is-active{background:#eef0fb;color:#36447d;border-color:#a8b4dc;box-shadow:0 10px 24px #4b548e16}
+.role-card small{color:#5c6980}
+.role-icon{background:#e1e6f8;color:#4b548e}
+.panel{border-color:var(--line);box-shadow:0 12px 32px #3544710a}
+.identity-panel{margin-top:14px}
+.identity-copy p,.section-heading p,.dashboard-head p,.auth-heading p{color:var(--muted)}
+.auth-panel{margin-top:14px}
+.auth-tabs{border-bottom-color:#e3e7f1}
+.auth-tab{color:#516082}
+.auth-tab:hover:not(:disabled),.auth-tab.is-active{background:#edf0fb;color:#394775}
+.auth-form label,.identity-controls label,.capacity-label{color:#475672}
+.auth-footnote{color:#66738a}
+.safety-note{margin-top:14px;background:#fff9ee;border-color:#eadfcb;color:#645336}
+.safety-icon{background:#f2e3c7;color:#604b27}
+.safety-label{color:#866e44}
+select,input{background:#fafbff;border-color:#ccd5e8;color:var(--ink)}
+select:focus,input:focus{border-color:#7180bd;box-shadow:0 0 0 3px #8d9be333}
+button,.button-link{background:var(--primary)}
+button:hover:not(:disabled),.button-link:hover{background:var(--primary-deep);box-shadow:0 6px 16px #4b548e25}
+button.secondary{background:#edf0fb;color:#3d4b7c}
+button.secondary:hover:not(:disabled){background:#e0e5f5}
+button.danger{background:#fff0f2;color:#a2384d}
+button.danger:hover:not(:disabled){background:#fce1e6}
+#message:not(:empty),#auth-message:not(:empty){background:#edf5f2;color:#276653;border-color:#d4e9df}
+#message.error,#auth-message.error{background:#fff1f3;color:#a2384d;border-color:#efd2da}
+.dashboard-head{margin-top:34px}
+.metric{background:#e9edfa;border-color:#dce3f3}
+.metric:nth-child(2){background:#f0f2f7;border-color:#e2e5ed}
+.metric:nth-child(3){background:#e7f2ef;border-color:#d9e9e3}
+.metric-label,.metric small{color:#58677f}
+.workspace-nav{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 0}
+.workspace-nav a{background:#fff;border:1px solid #dce3f2;border-radius:100px;padding:9px 14px;color:#41507b;text-decoration:none;font-size:12px;font-weight:800}
+.workspace-nav a:hover{background:#edf0fb;border-color:#a8b4dc}
+.section-panel{scroll-margin-top:24px}
+.section-heading{border-bottom-color:#e7ebf2}
+.section-symbol{background:#e8ebfa;color:#52629b}
+.count,.tag{background:#e9eef9;color:#415785}
+.card{background:#fff;border-color:#e0e5f0}
+.card:hover{border-color:#c3cde5;box-shadow:0 7px 18px #4b548e0c}
+.card p{color:#4e6079}
+.card .meta{color:#64728a}
+.card-foot{border-top-color:#e9edf4}
+.order-card[data-status="exception"]{border-left:4px solid #c87963}
+.order-card[data-status="exception"] .tag{background:#fff0e9;color:#994b37}
+.order-card[data-status="completed"] .tag{background:#e8f3ec;color:#306848}
+.order-card[data-status="closed"] .tag,.order-card[data-status="cancelled"] .tag{background:#f2f2f5;color:#697084}
+.empty{border-color:#d9dfec;color:#6a7890;background:#fafbfe}
+.queue-summary,.exception-note{background:#fff6e9;border-color:#efdfc6;color:#78552a}
+.audit-line{border-bottom-color:#e8ebf3;color:#59677e}
+.site-footer{background:#edf0f8;color:#64728b}
+.site-footer b{color:#465483}
+.file-help-icon{background:#e5e9fa;color:#45548a}
+.file-help>p:not(.eyebrow){color:#5b6981}
+.file-help strong{color:#425180}
+.file-help code{background:#e7eaf5}
+.form-section{background:#fdfdff;border-color:#e2e6f0}
+.form-section-title>span{background:#e5eafb;color:#4b5991}
+.form-section-title small,.form-grid label small{color:#64718a}
+.form-grid label{color:#465571}
+.form-grid input[readonly]{background:#eef1f9;color:#52617d}
+.handoff-box{background:#edf5f2;border-color:#d8e8e2}
+.handoff-box p{color:#617b74}
+.handoff-box span{border-color:#d4e5de;color:#386b5a}
+.form-submit{background:#eff1fa}
+.form-submit small{color:#68758d}
+#workspace{display:flex;flex-direction:column}
+#workspace[hidden]{display:none}
+#workspace .dashboard-head{order:0}
+#workspace .metrics{order:1}
+#workspace .workspace-nav{order:2}
+#workspace #student-create,#workspace #orders-panel,#workspace #courier-tools,#workspace #operations-panel,#workspace #slot-panel,#workspace #admin-tools,#workspace #audit-panel{order:4}
+#workspace[data-role="manager"] #operations-panel,#workspace[data-role="admin"] #operations-panel{order:3}
+#workspace[data-role="manager"] #orders-panel,#workspace[data-role="admin"] #orders-panel{order:4}
+#workspace[data-role="manager"] #slot-panel,#workspace[data-role="admin"] #slot-panel{order:5}
+#workspace[data-role="manager"] #admin-tools,#workspace[data-role="admin"] #admin-tools{order:6}
+#workspace[data-role="manager"] #audit-panel,#workspace[data-role="admin"] #audit-panel{order:7}
+@media(max-width:850px){.hero-grid{grid-template-columns:minmax(0,1fr) 300px;gap:24px;padding-block:42px}.hero h1{font-size:clamp(42px,6vw,56px)}.flow-card{max-width:none}}
+@media(max-width:600px){.hero-grid{display:block;padding-block:34px 38px}.flow-card{display:none}.hero h1{font-size:42px}.hero-copy>p:not(.hero-kicker){line-height:1.6;margin:14px 0}.hero-cta{margin-top:18px}.role-guide{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.role-card{padding:12px;min-height:94px;gap:5px}.role-card strong{font-size:14px}.role-card small{display:none}.role-icon{width:26px;height:26px}.safety-note{align-items:flex-start}.metric{padding:13px}.metric strong{font-size:27px}.workspace-nav{flex-wrap:nowrap;overflow:auto;padding-bottom:4px}.workspace-nav a{white-space:nowrap}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}button,.button-link,.card{transition:none}}

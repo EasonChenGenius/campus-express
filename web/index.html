@@ -3,13 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#143b33">
+  <meta name="theme-color" content="#4b548e">
   <title>校园快取通 · Campus Express</title>
   <link rel="stylesheet" href="./style.css">
   <link rel="stylesheet" href="./form.css">
+  <link rel="stylesheet" href="./theme.css">
   <script defer src="./file-entry.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
   <header class="site-header">
     <div class="shell topbar">
       <div class="brand-lockup"><span class="brand-mark" role="img" aria-label="四川师范大学校徽"></span><div><strong>校园快取通</strong><small>CAMPUS EXPRESS · V0.6.1</small></div></div>
@@ -34,6 +36,7 @@
           <h1>快递到校，<br><em>交接到楼下。</em></h1>
           <p>从预约到接单，从取件到确认，学生、代取员和管理者在同一个系统里协作。</p>
           <div class="hero-chips"><span>成龙校区</span><span>狮子山校区</span><span>虚构数据演示</span></div>
+          <a class="hero-cta" href="#experience">选择身份，开始演示 <span aria-hidden="true">→</span></a>
         </div>
         <div class="flow-card" aria-label="演示流程">
           <div class="flow-card-head"><span>流程预览</span><span class="flow-live">● DEMO</span></div>
@@ -45,10 +48,8 @@
       </div>
     </section>
 
-    <main class="shell content">
-      <section class="safety-note"><span class="safety-icon" aria-hidden="true">!</span><div><strong>仅限虚构数据</strong><p>测试身份可直接切换；学生账号、密码和验证码也只在本机演示。请勿填写真实手机号、常用密码、取件码或个人资料。</p></div><span class="safety-label">LOCAL ONLY</span></section>
-
-      <section class="role-guide" aria-label="体验入口">
+    <main id="main-content" class="shell content">
+      <section id="experience" class="role-guide" aria-label="体验入口">
         <button class="role-card is-active" type="button" data-role="student"><span class="role-icon">01</span><strong>学生入口</strong><small>注册或一键体验 · 预约与订单</small></button>
         <button class="role-card" type="button" data-role="courier"><span class="role-icon">02</span><strong>代取员入口</strong><small>审核后接单 · 进度与异常</small></button>
         <button class="role-card" type="button" data-role="manager"><span class="role-icon">03</span><strong>管理后台</strong><small>校区主管或总管理员 · 派单与审核</small></button>
@@ -58,6 +59,7 @@
         <div class="identity-copy"><span class="eyebrow">QUICK DEMO</span><h2>一键进入测试工作台</h2><p>只用于演示。学生、代取员、主管和总管理员的可见功能由服务端按角色区分。</p></div>
         <div class="identity-controls"><label for="account">测试账号</label><select id="account" aria-label="测试账号"></select><button id="login" type="button" disabled>进入演示 <span aria-hidden="true">→</span></button></div>
       </section>
+      <section class="safety-note"><span class="safety-icon" aria-hidden="true">!</span><div><strong>仅限虚构数据</strong><p>测试身份可直接切换；学生账号、密码和验证码也只在本机演示。请勿填写真实手机号、常用密码、取件码或个人资料。</p></div><span class="safety-label">LOCAL ONLY</span></section>
       <section class="panel auth-panel" aria-labelledby="auth-title">
         <div class="auth-heading"><div><span class="eyebrow">STUDENT ACCOUNT DEMO</span><h2 id="auth-title">学生账号流程演示</h2><p>体验注册、密码登录和找回密码。验证码直接显示在本机，不发送短信；只能用 <strong>TEST-</strong> 开头的虚构号码。</p></div><span class="auth-pill">未接入真实短信</span></div>
         <div class="auth-tabs" role="tablist" aria-label="学生账号操作"><button type="button" class="auth-tab is-active" data-auth-tab="login">密码登录</button><button type="button" class="auth-tab" data-auth-tab="register">注册学生</button><button type="button" class="auth-tab" data-auth-tab="reset">找回密码</button></div>
@@ -76,9 +78,10 @@
           <div class="metric"><span class="metric-label">待接单</span><strong id="metric-pending">0</strong><small>可处理任务</small></div>
           <div class="metric"><span class="metric-label">已完成</span><strong id="metric-complete">0</strong><small>演示订单</small></div>
         </section>
+        <nav id="workspace-nav" class="workspace-nav" aria-label="工作台快速导航"></nav>
 
         <section id="student-create" class="panel section-panel" hidden>
-          <div class="section-heading"><div><span class="eyebrow">01 / STUDENT</span><h2>创建测试订单</h2><p>填写虚构取件信息；费用由服务端计算，付款状态始终为未支付演示。</p></div><span class="section-symbol" aria-hidden="true">↗</span></div>
+          <div class="section-heading"><div><span class="eyebrow">STUDENT / 学生</span><h2>创建测试订单</h2><p>填写虚构取件信息；费用由服务端计算，付款状态始终为未支付演示。</p></div><span class="section-symbol" aria-hidden="true">↗</span></div>
           <form id="order-form" class="order-form">
             <div class="form-section"><div class="form-section-title"><span>①</span><div><strong>取件与交接</strong><small>先确认校区、测试点和宿舍苑区</small></div></div>
               <div class="form-grid">
@@ -104,12 +107,12 @@
           </form>
         </section>
 
-        <section class="panel section-panel"><div class="section-heading"><div><span class="eyebrow">02 / ORDERS</span><h2 id="orders-title">订单</h2><p id="orders-help"></p></div><span id="order-count" class="count">0 单</span></div><div id="orders" class="cards"></div></section>
-        <section id="courier-tools" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">03 / CAPACITY</span><h2>接单状态</h2><p id="availability">正在读取接单状态…</p></div><button id="toggle-availability" type="button" class="secondary">切换上线状态</button></div></section>
-        <section id="operations-panel" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">03 / OPERATIONS</span><h2>后台待办</h2><p>优先处理异常订单，再查看超过 30 分钟无人接单的测试订单。</p></div></div><div id="operations" class="cards"></div></section>
-        <section id="slot-panel" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">04 / SLOTS</span><h2>每小时预约容量</h2><p>按校区设置一小时测试订单名额；低于已预约数量的设置会被拒绝。</p></div><label class="capacity-label">校区 <select id="slot-campus" aria-label="选择时段校区"></select></label></div><div id="slot-capacities" class="cards"></div></section>
-        <section id="admin-tools" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">03 / TEAM</span><h2>代取员审核</h2><p>仅为测试账号审核；正式版须核验真实身份并记录证明。</p></div></div><div id="couriers" class="cards"></div></section>
-        <section id="audit-panel" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">04 / AUDIT</span><h2>操作记录</h2><p>记录测试账号的操作，不记录取件码。</p></div></div><div id="audit"></div></section>
+        <section id="orders-panel" class="panel section-panel"><div class="section-heading"><div><span class="eyebrow">ORDERS / 订单</span><h2 id="orders-title">订单</h2><p id="orders-help"></p></div><span id="order-count" class="count">0 单</span></div><div id="orders" class="cards"></div></section>
+        <section id="courier-tools" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">CAPACITY / 接单</span><h2>接单状态</h2><p id="availability">正在读取接单状态…</p></div><button id="toggle-availability" type="button" class="secondary">切换上线状态</button></div></section>
+        <section id="operations-panel" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">OPERATIONS / 待办</span><h2>后台待办</h2><p>优先处理异常订单，再查看超过 30 分钟无人接单的测试订单。</p></div></div><div id="operations" class="cards"></div></section>
+        <section id="slot-panel" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">SLOTS / 时段</span><h2>每小时预约容量</h2><p>按校区设置一小时测试订单名额；低于已预约数量的设置会被拒绝。</p></div><label class="capacity-label">校区 <select id="slot-campus" aria-label="选择时段校区"></select></label></div><div id="slot-capacities" class="cards"></div></section>
+        <section id="admin-tools" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">TEAM / 代取员</span><h2>代取员审核</h2><p>仅为测试账号审核；正式版须核验真实身份并记录证明。</p></div></div><div id="couriers" class="cards"></div></section>
+        <section id="audit-panel" class="panel section-panel" hidden><div class="section-heading"><div><span class="eyebrow">AUDIT / 记录</span><h2>操作记录</h2><p>记录测试账号的操作，不记录取件码。</p></div></div><div id="audit"></div></section>
       </div>
     </main>
   </div>

@@ -33,6 +33,11 @@ async function clearOldSession() {
 }
 function enterSession(result) {
     token = result.token; me = result.user; $('workspace').hidden = false;
+    $('workspace').dataset.role = me.role;
+    const navigation = me.role === 'student' ? [['student-create', '预约代取'], ['orders-panel', '我的订单']]
+      : me.role === 'courier' ? [['orders-panel', '任务池与进度'], ['courier-tools', '接单状态']]
+      : [['operations-panel', '异常待办'], ['orders-panel', '订单管理'], ['slot-panel', '时段容量'], ['admin-tools', '代取员审核'], ['audit-panel', '操作记录']];
+    $('workspace-nav').innerHTML = navigation.map(([id, label]) => `<a href="#${id}">${label}</a>`).join('');
     $('who').textContent = me.name;
     $('scope').textContent = me.role === 'admin' ? '总管理员 · 双校区测试订单' : `${{ student: '学生', courier: '代取员', manager: '校区主管' }[me.role]} · 仅限${campusName[me.campus]}测试数据`;
     $('student-create').hidden = me.role !== 'student';
@@ -126,7 +131,7 @@ function exceptionControl(o) {
 function orderCard(o) {
   const privateDetails = o.handoff ? `<p>当面交接位置：${escapeHtml(o.handoff)}</p>` : '<p>接单后可查看当面交接位置</p>';
   const code = o.pickup_code ? `<p>虚构取件码：<strong>${escapeHtml(o.pickup_code)}</strong></p>` : '';
-  return `<article class="card"><div class="card-head"><strong>📦 ${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)}${o.building ? ' · ' + escapeHtml(o.building) : ''}</strong><span class="tag">${escapeHtml(statusName[o.status] || o.status)}</span></div>
+  return `<article class="card order-card" data-status="${escapeHtml(o.status)}"><div class="card-head"><strong>📦 ${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)}${o.building ? ' · ' + escapeHtml(o.building) : ''}</strong><span class="tag">${escapeHtml(statusName[o.status] || o.status)}</span></div>
     <p>测试点：${escapeHtml(catalog.stations.find(s => s.id === o.station_id)?.name || o.station_id)} · ${o.qty} 件 · ${escapeHtml(slotName(o.slot))}</p>${privateDetails}${code}
     ${o.exception ? `<p class="exception-note">异常已暂停履约：${escapeHtml(reasonName[o.exception.reason] || o.exception.reason)}；等待本校区管理员核实。</p>` : ''}${o.lastResolution ? `<p class="meta">最近一次异常处理：${escapeHtml(reasonName[o.lastResolution.reason] || o.lastResolution.reason)} → ${escapeHtml(resolutionName[o.lastResolution.resolution] || o.lastResolution.resolution)} · ${escapeHtml(new Date(o.lastResolution.resolved_at).toLocaleString('zh-CN'))}</p>` : ''}<p class="meta">订单 ${escapeHtml(o.id.slice(0, 8))} · ${escapeHtml(new Date(o.created_at).toLocaleString('zh-CN'))} · ${o.courier_id ? `代取员 ${escapeHtml(o.courier_id)}` : '尚未指派'}</p>
     <div class="card-foot"><strong>模拟报价 ¥${(o.amount_cents / 100).toFixed(2)} · 未支付</strong><div class="actions">${orderActions(o)}</div></div></article>`;

@@ -1,6 +1,6 @@
 <view class="page">
   <view class="banner">测试订单 · 虚构取件码 · 全部未付款</view>
-  <view class="row"><view class="title">我的订单</view><text class="pill">{{orders.length}} 单</text></view>
+  <view class="hero"><view class="hero-kicker">CAMPUS EXPRESS · 学生端</view><view class="row"><view class="title">我的订单</view><text class="pill">{{orders.length}} 单</text></view><view class="subtitle">查看预约、配送状态与交接进度。</view></view>
   <view class="nav">
     <button class="button button-secondary" bindtap="openCreate">返回下单</button>
     <button class="button button-secondary" bindtap="refresh" disabled="{{loading}}">刷新</button>

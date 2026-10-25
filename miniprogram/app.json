@@ -8,9 +8,9 @@
   ],
   "window": {
     "navigationBarTitleText": "校园快取通 · 演示",
-    "navigationBarBackgroundColor": "#143a3b",
+    "navigationBarBackgroundColor": "#4b548e",
     "navigationBarTextStyle": "white",
-    "backgroundColor": "#f5f8f6"
+    "backgroundColor": "#f6f7fc"
   },
   "style": "v2"
 }

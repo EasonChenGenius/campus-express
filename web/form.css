@@ -14,9 +14,12 @@
 .handoff-box p{margin:5px 0 0;color:#64806e;font-size:11px;line-height:1.6}
 .handoff-box span{display:inline-block;background:#fff;border:1px solid #d7e8d3;border-radius:8px;padding:10px 13px;font-weight:800;color:#2d6e49;font-size:12px;white-space:nowrap}
 .code-field{grid-column:span 2}
+.pickup-codes{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pickup-codes .code-field{grid-column:auto}
+.pickup-codes>small{grid-column:1/-1;color:#64718a;line-height:1.5}
 .form-submit{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 23px;border-radius:13px;background:#eaf3e8}
 .form-submit strong,.form-submit small{display:block}
 .form-submit strong{font-size:14px}
 .form-submit small{font-size:11px;color:#738975;margin-top:3px}
-@media(max-width:850px){.form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.code-field{grid-column:span 2}}
-@media(max-width:600px){.form-grid{grid-template-columns:1fr}.code-field{grid-column:span 1}.handoff-box{flex-direction:column;align-items:flex-start}.handoff-box span{white-space:normal}.form-submit{flex-direction:column;align-items:stretch}.form-submit button{width:100%}}
+@media(max-width:850px){.form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.code-field{grid-column:span 2}.pickup-codes{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.form-grid{grid-template-columns:1fr}.code-field{grid-column:span 1}.pickup-codes{grid-template-columns:1fr}.handoff-box{flex-direction:column;align-items:flex-start}.handoff-box span{white-space:normal}.form-submit{flex-direction:column;align-items:stretch}.form-submit button{width:100%}}

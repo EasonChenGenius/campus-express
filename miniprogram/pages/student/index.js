@@ -8,7 +8,7 @@ Page({
     sizeOptions: ['小件', '大件'], sizeIndex: 0,
     speedOptions: ['普通', '加急'], speedIndex: 0,
     slots: [], slotOptions: [], slotIndex: 0,
-    pickupCode: '', handoff: '', busy: false, error: '', pendingHint: false,
+    pickupCodes: [''], handoff: '', busy: false, error: '', pendingHint: false,
     applicationStatus: 'none', applicationText: '正在读取申请状态…'
   },
   async onShow() { await Promise.all([this.loadCatalog(), this.loadApplication()]); },
@@ -43,7 +43,7 @@ Page({
         zone: this.data.zones[this.data.zoneIndex], building: this.data.buildings[this.data.buildingIndex],
         qty: this.data.qtyOptions[this.data.qtyIndex], size: this.data.sizeIndex ? 'large' : 'small',
         speed: this.data.speedIndex ? 'urgent' : 'normal', slot: this.data.slots[this.data.slotIndex]?.value,
-        pickupCode: this.data.pickupCode
+        pickupCodes: this.data.pickupCodes
       } : pending && pending.draft.campus === user.campus ? pending.draft : null;
       const zoneIndex = draft ? Math.max(0, zones.indexOf(draft.zone)) : 0;
       const buildingsByZone = catalog.campusBuildings?.[user.campus] || {};
@@ -56,7 +56,7 @@ Page({
         sizeIndex: draft && draft.size === 'large' ? 1 : 0,
         speedIndex: draft && draft.speed === 'urgent' ? 1 : 0,
         slotIndex: draft ? Math.max(0, slots.findIndex(item => item.value === draft.slot)) : 0,
-        pickupCode: draft ? draft.pickupCode : '',
+        pickupCodes: draft ? Array.from({ length: draft.qty || 1 }, (_, index) => (draft.pickupCodes || [draft.pickupCode || ''])[index] || '') : [''],
         handoff: zones[zoneIndex] ? zones[zoneIndex] + (buildings[buildingIndex] || '') + '楼下公共入口（演示位置，待核实）' : '',
         pendingHint: !preserveInput && Boolean(draft)
       });
@@ -68,6 +68,11 @@ Page({
     const field = event.currentTarget.dataset.field;
     const index = Number(event.detail.value);
     this.setData({ [field]: index, error: '' });
+    if (field === 'qtyIndex') {
+      const codes = this.data.pickupCodes.slice(0, this.data.qtyOptions[index]);
+      while (codes.length < this.data.qtyOptions[index]) codes.push('');
+      this.setData({ pickupCodes: codes });
+    }
     if (field === 'zoneIndex') {
       const zone = this.data.zones[index];
       const buildings = this.data.buildingsByZone[zone] || [];
@@ -76,21 +81,23 @@ Page({
     if (field === 'buildingIndex') this.setData({ handoff: this.data.zones[this.data.zoneIndex] + this.data.buildings[index] + '楼下公共入口（演示位置，待核实）' });
   },
   changeCode(event) {
-    this.setData({ pickupCode: event.detail.value, error: '' });
+    const codes = this.data.pickupCodes.slice();
+    codes[Number(event.currentTarget.dataset.index)] = event.detail.value;
+    this.setData({ pickupCodes: codes, error: '' });
   },
   async submit() {
     if (this.data.busy) return;
     const user = api.requireRole('student');
     if (!user) return;
-    const pickupCode = api.demoCode(this.data.pickupCode);
-    if (!pickupCode) return this.setData({ error: '仅可输入虚构测试码，例如 TEST-123456、TEST-5-2-0042 或 TEST-9VK518。' });
+    const pickupCodes = this.data.pickupCodes.map(code => api.demoCode(code));
+    if (pickupCodes.length !== this.data.qtyOptions[this.data.qtyIndex] || pickupCodes.some(code => !code)) return this.setData({ error: '每件包裹都需填写一个虚构 TEST- 取件码。' });
     if (!this.data.stations.length || !this.data.zones.length || !this.data.slots.length) return this.setData({ error: '当前没有可预约的测试站点、苑区或时段。' });
     const draft = {
       campus: user.campus,
       stationId: this.data.stations[this.data.stationIndex].id,
       zone: this.data.zones[this.data.zoneIndex],
       building: this.data.buildings[this.data.buildingIndex] || null,
-      pickupCode,
+      pickupCodes,
       qty: this.data.qtyOptions[this.data.qtyIndex],
       size: this.data.sizeIndex ? 'large' : 'small',
       speed: this.data.speedIndex ? 'urgent' : 'normal',

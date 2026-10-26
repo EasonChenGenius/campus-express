@@ -26,10 +26,25 @@ test('时段冲突刷新可选时段时保留学生已填的虚构取件码和�
   });
   await page.onShow();
   page.changePicker({ currentTarget: { dataset: { field: 'zoneIndex' } }, detail: { value: '1' } });
-  page.changeCode({ detail: { value: 'TEST-123456' } });
+  page.changeCode({ currentTarget: { dataset: { index: 0 } }, detail: { value: 'TEST-123456' } });
   await page.submit();
-  assert.equal(page.data.pickupCode, 'TEST-123456');
+  assert.equal(page.data.pickupCodes[0], 'TEST-123456');
   assert.equal(page.data.zones[page.data.zoneIndex], '西苑');
   assert.equal(page.data.slots[page.data.slotIndex].value, 'new-slot');
   assert.equal(page.data.error, '该时段已约满');
+});
+
+test('小程序件数变化后增减取件码输入格，保留已有值', async () => {
+  let page;
+  vm.runInNewContext(source, {
+    Page: config => { page = { ...config, data: { ...config.data }, setData(values) { Object.assign(this.data, values); } }; },
+    require: path => path.includes('display') ? { campus: {} } : {},
+    wx: {}, Promise
+  });
+  page.changeCode({ currentTarget: { dataset: { index: 0 } }, detail: { value: 'TEST-123456' } });
+  page.changePicker({ currentTarget: { dataset: { field: 'qtyIndex' } }, detail: { value: '2' } });
+  assert.equal(page.data.pickupCodes.length, 3);
+  assert.equal(page.data.pickupCodes[0], 'TEST-123456');
+  page.changePicker({ currentTarget: { dataset: { field: 'qtyIndex' } }, detail: { value: '0' } });
+  assert.equal(page.data.pickupCodes.length, 1);
 });

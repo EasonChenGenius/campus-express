@@ -5,6 +5,12 @@
   <view class="error" wx:if="{{error}}">{{error}}</view>
   <view class="card" wx:if="{{order}}">
     <view class="row"><text class="card-title">{{order.campusName}} · {{order.zone}}{{order.building ? ' · ' + order.building : ''}}</text><text class="pill">{{order.statusName}}</text></view>
+    <view class="section-kicker">配送进度</view>
+    <view class="timeline" aria-label="订单进度">
+      <view class="timeline-step state-{{item.state}}" wx:for="{{order.progressSteps}}" wx:key="key">
+        <view class="timeline-dot"></view><text>{{item.title}}</text>
+      </view>
+    </view>
     <view class="field">包裹 {{order.qty}} 件 · {{order.slotName}}</view>
     <view class="field">模拟报价 ¥{{order.amountText}} · 未付款</view>
     <view class="field" wx:if="{{order.handoff}}">楼下当面交接点：{{order.handoff}}</view>

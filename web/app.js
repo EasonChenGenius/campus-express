@@ -1,4 +1,5 @@
 import { parseDemoPickupCode } from './pickup-code.js';
+import { prepareOrderRequest, clearOrderRequest } from './order-request.js';
 
 const $ = id => document.getElementById(id);
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -8,7 +9,8 @@ const reasonName = { pickup_failed: '取件失败', damaged: '包裹破损', stu
 const resolutionName = { resume: '核实后恢复原进度', retry: '确认尚未取件，重新开放接单', close: '人工关闭异常订单' };
 const actionName = { demo_order_created: '创建测试订单', accept: '代取员接单', assign: '人工派单', progress_picked: '已取件', progress_delivering: '开始配送', progress_delivered: '已交接', confirm: '学生确认', cancel: '学生取消', courier_approved: '代取员审核通过', courier_suspended: '代取员暂停', courier_online: '代取员上线', courier_offline: '代取员下线', courier_capacity_updated: '调整接单上限', exception_reported: '异常上报', exception_resume: '异常恢复', exception_retry: '重新开放接单', exception_close: '关闭异常订单' };
 const slotName = value => /^\d{4}-\d{2}-\d{2}T\d{2}:00:00\+08:00$/.test(value) ? `${value.slice(5, 10)} ${value.slice(11, 16)}–${String(Number(value.slice(11, 13)) + 1).padStart(2, '0')}:00` : ({ 'today-evening': '旧版：今日傍晚', 'tomorrow-noon': '旧版：明日中午' }[value] || value);
-let token = '', me = null, catalog = null, couriers = [], availability = null;
+let token = '', me = null, catalog = null, couriers = [], availability = null, orderSubmitting = false;
+const pendingOrderKey = user => `campus-express-pending-order-${user.id}`;
 
 async function api(path, options = {}) {
   let response;
@@ -18,7 +20,16 @@ async function api(path, options = {}) {
     throw new Error('无法连接本地服务。请双击项目中的“启动校园快取通.command”，然后刷新页面。');
   }
   const data = await response.json();
-  if (!response.ok) { const error = new Error(data.error || '请求失败'); error.status = response.status; throw error; }
+  if (!response.ok) {
+    const error = new Error(data.error || '请求失败'); error.status = response.status;
+    if (response.status === 401 && token) {
+      if (me) clearOrderRequest(sessionStorage, pendingOrderKey(me));
+      token = ''; me = null; $('workspace').hidden = true;
+      error.message = '测试身份已失效，请重新选择身份并进入演示。';
+      document.getElementById('experience').scrollIntoView({ block: 'start' });
+    }
+    throw error;
+  }
   return data;
 }
 function message(text, error = false) { $('message').textContent = text; $('message').classList.toggle('error', error); }
@@ -28,6 +39,7 @@ async function perform(work, success) { try { await work(); message(success); aw
 async function clearOldSession() {
   if (!token) return;
   try { await api('/api/session/logout', { method: 'POST' }); } catch {}
+  if (me) clearOrderRequest(sessionStorage, pendingOrderKey(me));
   token = ''; me = null;
   $('workspace').hidden = true;
 }
@@ -175,10 +187,25 @@ async function refresh() {
 }
 async function createOrder(event) {
   event.preventDefault();
+  if (orderSubmitting || !me || me.role !== 'student') return;
   const code = parseDemoPickupCode($('pickup-code').value);
   if (!code) return message('请输入虚构测试码，例如 TEST-123456、TEST-5-2-0042 或 TEST-9VK518', true);
-  const body = { requestId: crypto.randomUUID(), campus: me.campus, stationId: $('station').value, zone: $('zone').value, building: $('building').value || null, pickupCode: code.value, qty: Number($('qty').value), size: $('size').value, speed: $('speed').value, slot: $('slot').value };
-  await perform(async () => { await api('/api/orders', { method: 'POST', body: JSON.stringify(body) }); $('order-form').reset(); }, '测试订单已创建；没有付款或真实配送');
+  const draft = { campus: me.campus, stationId: $('station').value, zone: $('zone').value, building: $('building').value || null, pickupCode: code.value, qty: Number($('qty').value), size: $('size').value, speed: $('speed').value, slot: $('slot').value };
+  const key = pendingOrderKey(me);
+  const requestId = prepareOrderRequest(sessionStorage, key, draft, () => crypto.randomUUID());
+  const submit = $('order-form').querySelector('[type="submit"]');
+  orderSubmitting = true; submit.disabled = true;
+  try {
+    await api('/api/orders', { method: 'POST', body: JSON.stringify({ ...draft, requestId }) });
+    clearOrderRequest(sessionStorage, key);
+    $('order-form').reset();
+    message('测试订单已创建；没有付款或真实配送');
+    try { await refresh(); } catch (error) { message(`订单已创建，但列表刷新失败：${error.message}`, true); }
+  } catch (error) {
+    if (error.status === 409 || error.status === 401) clearOrderRequest(sessionStorage, key);
+    message(error.message, true);
+    if (error.status === 409) await refresh().catch(() => {});
+  } finally { orderSubmitting = false; submit.disabled = false; }
 }
 async function handleClick(event) {
   const button = event.target.closest('button');

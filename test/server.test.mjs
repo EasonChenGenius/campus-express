@@ -104,6 +104,9 @@ test('本机网页可读取新主题样式', async t => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get('content-type'), /text\/css/);
   assert.match(await response.text(), /\.workspace-nav/);
+  const script = await fetch(`${base}/order-request.js`);
+  assert.equal(script.status, 200);
+  assert.match(await script.text(), /prepareOrderRequest/);
 });
 
 test('测试会话可主动退出且 30 分钟后自动失效', async t => {

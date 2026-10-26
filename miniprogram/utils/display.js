@@ -10,11 +10,26 @@ function slotName(value) {
   return value.slice(5, 10) + ' ' + value.slice(11, 16) + '–' + String(Number(value.slice(11, 13)) + 1).padStart(2, '0') + ':00';
 }
 
+const stages = [
+  ['pending', '等待接单'], ['assigned', '代取员已接单'], ['picked', '包裹已取出'],
+  ['delivering', '正在送往楼下'], ['delivered', '等待学生确认'], ['completed', '订单完成']
+];
+function progressSteps(order) {
+  const interrupted = ['exception', 'closed', 'cancelled'].includes(order.status);
+  const last = interrupted ? (order.exception?.previous_status || order.lastResolution?.previous_status || 'pending') : order.status;
+  const index = Math.max(0, stages.findIndex(([key]) => key === last));
+  const visible = interrupted ? stages.slice(0, index + 1) : stages;
+  const result = visible.map(([key, title], step) => ({ key, title, state: interrupted || order.status === 'completed' || step < index ? 'done' : step === index ? 'current' : 'waiting' }));
+  if (interrupted) result.push({ key: order.status, title: { exception: '异常待核实', closed: '异常已关闭', cancelled: '订单已取消' }[order.status], state: 'current' });
+  return result;
+}
+
 function decorate(order) {
   return {
     ...order,
     campusName: campus[order.campus] || order.campus,
     statusName: status[order.status] || order.status,
+    progressSteps: progressSteps(order),
     exceptionReason: order.exception ? exceptionReason[order.exception.reason] || order.exception.reason : '',
     lastResolutionText: order.lastResolution ? (exceptionReason[order.lastResolution.reason] || order.lastResolution.reason) + ' → ' + (resolutionName[order.lastResolution.resolution] || order.lastResolution.resolution) : '',
     slotName: slotName(order.slot),
@@ -24,4 +39,4 @@ function decorate(order) {
   };
 }
 
-module.exports = { campus, status, slotName, decorate };
+module.exports = { campus, status, slotName, progressSteps, decorate };

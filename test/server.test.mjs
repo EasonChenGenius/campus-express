@@ -341,9 +341,29 @@ test('相同请求编号只重试同一订单内容，错误响应提供稳定�
   assert.equal(unauthorized.status, 401);
   assert.equal(unauthorized.body.code, 'UNAUTHORIZED');
   const capabilities = await request('/api/capabilities');
-  assert.equal(capabilities.body.version, '0.7.0');
-  assert.equal(capabilities.body.apiContract, 9);
+  assert.equal(capabilities.body.version, '0.7.1');
+  assert.equal(capabilities.body.apiContract, 10);
   assert.equal(capabilities.body.closedPilotReady, false);
+});
+
+test('多件包裹必须逐件提供虚构取件码，并在接单前隐藏全部码', async t => {
+  const { request, login, orderBody } = await setup(t);
+  const [student, courier, admin] = await Promise.all(['student-a', 'runner-cl-1', 'admin'].map(login));
+  const body = orderBody({ qty: 2, pickupCodes: ['test-123456', 'TEST-5-2-0042'] });
+  assert.equal((await request('/api/orders', student, 'POST', { ...body, pickupCodes: ['TEST-123456'] })).status, 400);
+  assert.equal((await request('/api/orders', student, 'POST', { ...body, pickupCodes: ['TEST-123456', 'real-code'] })).status, 400);
+  const created = await request('/api/orders', student, 'POST', body);
+  assert.equal(created.status, 201);
+  assert.deepEqual(created.body.pickup_codes, ['TEST-123456', 'TEST-5-2-0042']);
+  assert.equal((await request('/api/orders', student, 'POST', { ...body, pickupCodes: ['TEST-123456', 'TEST-5-2-0042'] })).body.id, created.body.id);
+  assert.equal((await request('/api/orders', student, 'POST', { ...body, pickupCodes: ['TEST-123456', 'TEST-9999'] })).status, 409);
+  const waiting = (await request(`/api/orders/${created.body.id}`, courier)).body;
+  assert.equal(waiting.pickup_codes, undefined);
+  assert.equal(waiting.pickup_code, undefined);
+  assert.equal((await request(`/api/orders/${created.body.id}`, admin)).body.pickup_codes, undefined);
+  const accepted = await request(`/api/orders/${created.body.id}/accept`, courier, 'POST');
+  assert.equal(accepted.status, 200);
+  assert.deepEqual(accepted.body.pickup_codes, ['TEST-123456', 'TEST-5-2-0042']);
 });
 
 test('两个校区完整测试订单流，20 个不同代取员请求只有一人接单', async t => {

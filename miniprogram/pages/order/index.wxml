@@ -15,7 +15,7 @@
     <view class="field">包裹 {{order.qty}} 件 · {{order.slotName}}</view>
     <view class="field">模拟报价 ¥{{order.amountText}} · 未付款</view>
     <view class="field" wx:if="{{order.handoff}}">楼下当面交接点：{{order.handoff}}</view>
-    <view class="field" wx:if="{{order.pickup_code}}">虚构取件码：{{order.pickup_code}}</view>
+    <view class="field" wx:for="{{order.pickup_codes}}" wx:key="index">第 {{index + 1}} 件虚构取件码：{{item}}</view>
     <view class="notice" wx:if="{{order.exception}}">异常已暂停履约：{{order.exceptionReason}}。本校区管理员核实后处理，请刷新查看结果。</view>
     <view class="muted" wx:if="{{order.lastResolution}}">最近一次异常处理：{{order.lastResolutionText}}</view>
     <view class="muted">编号 {{order.shortId}} · {{order.createdText}}</view>

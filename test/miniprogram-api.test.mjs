@@ -31,11 +31,12 @@ test('小程序断网后使用同一请求编号重试，成功后清除待提�
     if (attempts === 1) options.fail({});
     else options.success({ statusCode: 201, data: { id: 'demo-order' } });
   });
-  const draft = { campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', pickupCode: 'TEST-123456', qty: 1, size: 'small', speed: 'normal', slot: '2026-10-23T09:00:00+08:00' };
+  const draft = { campus: 'chenglong', stationId: 'demo-cl', zone: '东苑', pickupCodes: ['TEST-123456', 'TEST-5-2-0042'], qty: 2, size: 'small', speed: 'normal', slot: '2026-10-23T09:00:00+08:00' };
   await assert.rejects(h.api.submitOrder(draft), error => error.code === 'NETWORK_ERROR');
-  assert.equal(h.api.pendingDraft().draft.pickupCode, 'TEST-123456');
+  assert.deepEqual(Array.from(h.api.pendingDraft().draft.pickupCodes), ['TEST-123456', 'TEST-5-2-0042']);
   await h.api.submitOrder(draft);
   assert.equal(h.calls[0].data.requestId, h.calls[1].data.requestId);
+  assert.deepEqual(Array.from(h.calls[1].data.pickupCodes), ['TEST-123456', 'TEST-5-2-0042']);
   assert.equal(h.api.pendingDraft(), null);
 });
 

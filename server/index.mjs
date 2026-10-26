@@ -79,6 +79,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
   if (!userColumns.has('max_active')) db.exec('ALTER TABLE users ADD COLUMN max_active INTEGER NOT NULL DEFAULT 2');
   const orderColumns = new Set(db.prepare('PRAGMA table_info(orders)').all().map(c => c.name));
   if (!orderColumns.has('building')) db.exec('ALTER TABLE orders ADD COLUMN building TEXT');
+  if (!orderColumns.has('pickup_codes')) db.exec('ALTER TABLE orders ADD COLUMN pickup_codes TEXT');
   const seed = db.prepare('INSERT OR IGNORE INTO users (id,name,role,campus,approved) VALUES (?,?,?,?,?)');
   for (const user of fixtures) seed.run(...user);
   const sessions = new Map();
@@ -113,6 +114,14 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
   };
   const getUser = id => db.prepare('SELECT id,name,role,campus,approved,online,max_active FROM users WHERE id=?').get(id);
   const getOrder = id => db.prepare('SELECT * FROM orders WHERE id=?').get(id);
+  const storedCodes = order => order.pickup_codes ? JSON.parse(order.pickup_codes) : [order.pickup_code];
+  const submittedCodes = body => {
+    const input = Array.isArray(body.pickupCodes) ? body.pickupCodes : body.qty === 1 && typeof body.pickupCode === 'string' ? [body.pickupCode] : null;
+    if (!input || input.length !== body.qty || body.qty < 1 || body.qty > 3) fail(400, '取件码数量必须与包裹件数一致');
+    const codes = input.map(value => parseDemoPickupCode(value)?.value);
+    if (codes.some(value => !value)) fail(400, '每件包裹都需填写 TEST- 开头的虚构取件码');
+    return codes;
+  };
   const audit = (actor, action, orderId = null, targetId = null) =>
     db.prepare('INSERT INTO audit_logs(at,actor_id,action,order_id,target_id) VALUES (?,?,?,?,?)')
       .run(new Date().toISOString(), actor, action, orderId, targetId);
@@ -140,6 +149,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
     if (user.id === order.student_id || user.id === order.courier_id) {
       base.handoff = order.handoff;
       base.pickup_code = order.pickup_code;
+      base.pickup_codes = storedCodes(order);
     } else if (user.role === 'admin' || user.role === 'manager') {
       base.handoff = order.handoff;
     }
@@ -175,7 +185,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : url.pathname.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });
         res.end(content); return;
       }
-      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.7.0', apiContract: 9, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, realSms: false, closedPilotReady: false });
+      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.7.1', apiContract: 10, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, realSms: false, closedPilotReady: false });
       if (req.method === 'GET' && url.pathname === '/api/demo/accounts') {
         const added = db.prepare("SELECT u.id,u.name,u.role,u.campus FROM courier_applications a JOIN users u ON u.id=a.courier_id WHERE a.status='approved'").all();
         return send(res, 200, [...fixtures.map(([id, name, role, campus]) => ({ id, name, role, campus })), ...added]);
@@ -351,13 +361,14 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         requireRole(user, 'student');
         const b = await bodyOf(req);
         if (!/^[a-zA-Z0-9-]{8,64}$/.test(b.requestId || '')) fail(400, '缺少有效请求编号');
+        const pickupCodes = submittedCodes(b);
         let responseStatus, responseOrder;
         db.exec('BEGIN IMMEDIATE');
         try {
           const existing = db.prepare('SELECT * FROM orders WHERE student_id=? AND request_id=?').get(user.id, b.requestId);
           if (existing) {
             const sameRequest = existing.campus === b.campus && existing.station_id === b.stationId
-              && existing.zone === b.zone && existing.building === (b.building || null) && existing.pickup_code === parseDemoPickupCode(b.pickupCode)?.value
+              && existing.zone === b.zone && existing.building === (b.building || null) && JSON.stringify(storedCodes(existing)) === JSON.stringify(pickupCodes)
               && existing.qty === b.qty && existing.size === b.size && existing.speed === b.speed && existing.slot === b.slot
               && !Object.hasOwn(b, 'handoff');
             if (!sameRequest) fail(409, '该请求编号已用于其他订单内容，请刷新后重试');
@@ -372,12 +383,10 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
             if (!validSlot(b.slot)) fail(400, '请选择未过期的白天或傍晚一小时时段（09:00–19:00）');
             if (Object.hasOwn(b, 'handoff')) fail(400, '见面位置由宿舍苑区自动确定，无需填写地址');
             const handoff = `${b.zone}${b.building || ''}楼下公共入口（演示位置，待核实）`;
-            const pickupCode = parseDemoPickupCode(b.pickupCode);
-            if (!pickupCode) fail(400, '仅接受 TEST- 开头的虚构码：数字码、货架-层-末四位或字母数字码');
             if (bookedCount(user.campus,b.slot) >= slotLimit(user.campus,b.slot)) fail(409, '该时段已约满，请刷新后选择其他时段');
             const id = randomUUID(), at = now(), amount = (b.size === 'large' ? 500 : 300) + (b.qty - 1) * 100 + (b.speed === 'urgent' ? 200 : 0);
-            db.prepare(`INSERT INTO orders (id,request_id,student_id,campus,station_id,zone,building,handoff,pickup_code,qty,size,speed,slot,amount_cents,payment_status,status,courier_id,created_at,updated_at)
-              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'demo_not_paid','pending',NULL,?,?)`).run(id,b.requestId,user.id,user.campus,station.id,b.zone,b.building || null,handoff,pickupCode.value,b.qty,b.size,b.speed,b.slot,amount,at,at);
+            db.prepare(`INSERT INTO orders (id,request_id,student_id,campus,station_id,zone,building,handoff,pickup_code,pickup_codes,qty,size,speed,slot,amount_cents,payment_status,status,courier_id,created_at,updated_at)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'demo_not_paid','pending',NULL,?,?)`).run(id,b.requestId,user.id,user.campus,station.id,b.zone,b.building || null,handoff,pickupCodes[0],JSON.stringify(pickupCodes),b.qty,b.size,b.speed,b.slot,amount,at,at);
             audit(user.id, 'demo_order_created', id);
             responseStatus = 201;
             responseOrder = getOrder(id);
@@ -523,5 +532,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const { port = 3000, host = '127.0.0.1' } = { port: Number(process.env.PORT || 3000) };
   if (host !== '127.0.0.1') throw Error('本地演示仅允许 127.0.0.1');
   await mkdir(join(root, 'data'), { recursive: true });
-  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.7.0 本地演示：http://${host}:${port}`));
+  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.7.1 本地演示：http://${host}:${port}`));
 }

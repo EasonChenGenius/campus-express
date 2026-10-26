@@ -145,7 +145,8 @@ function exceptionControl(o) {
 }
 function orderCard(o) {
   const privateDetails = o.handoff ? `<p>当面交接位置：${escapeHtml(o.handoff)}</p>` : '<p>接单后可查看当面交接位置</p>';
-  const code = o.pickup_code ? `<p>虚构取件码：<strong>${escapeHtml(o.pickup_code)}</strong></p>` : '';
+  const codes = o.pickup_codes || (o.pickup_code ? [o.pickup_code] : []);
+  const code = codes.length ? `<p>虚构取件码：${codes.map((value, index) => `<strong>第${index + 1}件 ${escapeHtml(value)}</strong>`).join(' · ')}</p>` : '';
   return `<article class="card order-card" data-order-id="${escapeHtml(o.id)}" data-status="${escapeHtml(o.status)}"><div class="card-head"><strong>📦 ${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)}${o.building ? ' · ' + escapeHtml(o.building) : ''}</strong><span class="tag">${escapeHtml(statusName[o.status] || o.status)}</span></div>
     <p>测试点：${escapeHtml(catalog.stations.find(s => s.id === o.station_id)?.name || o.station_id)} · ${o.qty} 件 · ${escapeHtml(slotName(o.slot))}</p>${privateDetails}${code}
     ${o.exception ? `<p class="exception-note">异常已暂停履约：${escapeHtml(reasonName[o.exception.reason] || o.exception.reason)}；等待本校区管理员核实。</p>` : ''}${o.lastResolution ? `<p class="meta">最近一次异常处理：${escapeHtml(reasonName[o.lastResolution.reason] || o.lastResolution.reason)} → ${escapeHtml(resolutionName[o.lastResolution.resolution] || o.lastResolution.resolution)} · ${escapeHtml(new Date(o.lastResolution.resolved_at).toLocaleString('zh-CN'))}</p>` : ''}<p class="meta">订单 ${escapeHtml(o.id.slice(0, 8))} · ${escapeHtml(new Date(o.created_at).toLocaleString('zh-CN'))} · ${o.courier_id ? `代取员 ${escapeHtml(o.courier_id)}` : '尚未指派'}</p>
@@ -206,9 +207,9 @@ async function refresh() {
 async function createOrder(event) {
   event.preventDefault();
   if (orderSubmitting || !me || me.role !== 'student') return;
-  const code = parseDemoPickupCode($('pickup-code').value);
-  if (!code) return message('请输入虚构测试码，例如 TEST-123456、TEST-5-2-0042 或 TEST-9VK518', true);
-  const draft = { campus: me.campus, stationId: $('station').value, zone: $('zone').value, building: $('building').value || null, pickupCode: code.value, qty: Number($('qty').value), size: $('size').value, speed: $('speed').value, slot: $('slot').value };
+  const pickupCodes = [...document.querySelectorAll('#pickup-codes input')].map(input => parseDemoPickupCode(input.value)?.value);
+  if (pickupCodes.length !== Number($('qty').value) || pickupCodes.some(code => !code)) return message('每件包裹都要填写一个虚构测试码，例如 TEST-123456。', true);
+  const draft = { campus: me.campus, stationId: $('station').value, zone: $('zone').value, building: $('building').value || null, pickupCodes, qty: Number($('qty').value), size: $('size').value, speed: $('speed').value, slot: $('slot').value };
   const key = pendingOrderKey(me);
   const requestId = prepareOrderRequest(sessionStorage, key, draft, () => crypto.randomUUID());
   const submit = $('order-form').querySelector('[type="submit"]');
@@ -217,6 +218,7 @@ async function createOrder(event) {
     await api('/api/orders', { method: 'POST', body: JSON.stringify({ ...draft, requestId }) });
     clearOrderRequest(sessionStorage, key);
     $('order-form').reset();
+    renderPickupInputs(false);
     message('测试订单已创建；没有付款或真实配送');
     try { await refresh(); } catch (error) { message(`订单已创建，但列表刷新失败：${error.message}`, true); }
   } catch (error) {
@@ -224,6 +226,11 @@ async function createOrder(event) {
     message(error.message, true);
     if (error.status === 409) await refresh().catch(() => {});
   } finally { orderSubmitting = false; submit.disabled = false; }
+}
+function renderPickupInputs(preserve = true) {
+  const previous = preserve ? [...document.querySelectorAll('#pickup-codes input')].map(input => input.value) : [];
+  const count = Number($('qty').value);
+  $('pickup-codes').innerHTML = Array.from({ length: count }, (_, index) => `<label class="code-field">第 ${index + 1} 件虚构取件码<input required maxlength="17" placeholder="如 TEST-${index + 1}23456" list="pickup-examples" autocomplete="off" spellcheck="false" value="${escapeHtml(previous[index] || '')}"></label>`).join('') + '<small>每件填写一个 TEST- 测试码。可试 TEST-123456、TEST-5-2-0042；请勿填真实码。</small>';
 }
 async function handleClick(event) {
   const button = event.target.closest('button');
@@ -283,6 +290,8 @@ async function init() {
   $('toggle-availability').addEventListener('click', () => perform(() => api('/api/couriers/me/availability', { method: 'POST', body: JSON.stringify({ online: !availability.online }) }), '接单状态已更新'));
   $('apply-courier').addEventListener('click', () => perform(() => api('/api/courier-applications', { method: 'POST', body: '{}' }), '虚构代取员申请已提交；等待本校区主管审核'));
   $('order-form').addEventListener('submit', createOrder);
+  $('qty').addEventListener('change', () => renderPickupInputs());
+  renderPickupInputs();
   $('zone').addEventListener('change', updateHandoffPreview);
   $('building').addEventListener('change', updateHandoffPreview);
   $('workspace').addEventListener('click', handleClick);

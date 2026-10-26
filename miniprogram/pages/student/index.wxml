@@ -22,11 +22,11 @@
     <view class="muted" wx:else>该苑区楼号待核实，暂按苑区演示。</view>
     <view class="muted">当面交接点：{{handoff}}</view>
     <view class="section-kicker section-gap">02 / 包裹信息</view>
-    <view class="field"><text class="label">虚构取件码</text>
-      <input class="control" value="{{pickupCode}}" placeholder="例如 TEST-123456" maxlength="24" bindinput="changeCode"/>
-    </view>
     <view class="field"><text class="label">包裹件数</text>
       <picker range="{{qtyOptions}}" value="{{qtyIndex}}" data-field="qtyIndex" bindchange="changePicker"><view class="control">{{qtyOptions[qtyIndex]}} 件</view></picker>
+    </view>
+    <view class="field" wx:for="{{pickupCodes}}" wx:key="index"><text class="label">第 {{index + 1}} 件虚构取件码</text>
+      <input class="control" value="{{item}}" data-index="{{index}}" placeholder="例如 TEST-123456" maxlength="24" bindinput="changeCode"/>
     </view>
     <view class="field"><text class="label">包裹大小</text>
       <picker range="{{sizeOptions}}" value="{{sizeIndex}}" data-field="sizeIndex" bindchange="changePicker"><view class="control">{{sizeOptions[sizeIndex]}}</view></picker>

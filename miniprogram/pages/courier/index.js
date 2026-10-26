@@ -1,14 +1,18 @@
 const api = require('../../utils/api');
 const { campus, decorate } = require('../../utils/display');
+const { startVisibleRefresh, stopVisibleRefresh } = require('../../utils/visible-refresh');
 
 Page({
-  data: { campusName: '', pool: [], mine: [], availability: null, canAccept: false, loading: false, busyId: '', busy: false, error: '' },
+  data: { campusName: '', pool: [], mine: [], availability: null, canAccept: false, loading: false, busyId: '', busy: false, error: '', lastUpdated: '' },
   onShow() {
     const user = api.requireRole('courier');
     if (!user) return;
     this.setData({ campusName: campus[user.campus] });
     this.refresh();
+    startVisibleRefresh(this, this.refresh);
   },
+  onHide() { stopVisibleRefresh(this); },
+  onUnload() { stopVisibleRefresh(this); },
   async refresh() {
     this.setData({ loading: true, error: '' });
     try {
@@ -19,7 +23,8 @@ Page({
       const orders = await api.request('/api/orders');
       this.setData({
         pool: orders.filter(o => o.status === 'pending').map(decorate),
-        mine: orders.filter(o => o.courier_id === user.id).map(decorate)
+        mine: orders.filter(o => o.courier_id === user.id).map(decorate),
+        lastUpdated: new Date().toLocaleTimeString('zh-CN')
       });
     } catch (error) {
       this.setData({ error: error.message });

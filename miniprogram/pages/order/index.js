@@ -1,8 +1,9 @@
 const api = require('../../utils/api');
 const { decorate } = require('../../utils/display');
+const { startVisibleRefresh, stopVisibleRefresh } = require('../../utils/visible-refresh');
 
 Page({
-  data: { order: null, loading: false, busy: false, error: '', role: '', nextStatus: '', nextLabel: '', canCancel: false, canConfirm: false, canProgress: false, canReport: false, reasonOptions: ['取件失败','包裹破损','学生暂无法交接','其他异常'], reasonIndex: 0 },
+  data: { order: null, loading: false, busy: false, error: '', role: '', nextStatus: '', nextLabel: '', canCancel: false, canConfirm: false, canProgress: false, canReport: false, lastUpdated: '', reasonOptions: ['取件失败','包裹破损','学生暂无法交接','其他异常'], reasonIndex: 0 },
   onLoad(options) { this.orderId = options.id; },
   onShow() {
     const user = api.requireRole();
@@ -13,7 +14,10 @@ Page({
     }
     this.setData({ role: user.role });
     this.refresh();
+    startVisibleRefresh(this, this.refresh);
   },
+  onHide() { stopVisibleRefresh(this); },
+  onUnload() { stopVisibleRefresh(this); },
   async refresh() {
     if (!this.orderId) return this.setData({ error: '订单编号缺失。' });
     this.setData({ loading: true, error: '' });
@@ -21,7 +25,7 @@ Page({
       const order = decorate(await api.request('/api/orders/' + encodeURIComponent(this.orderId)));
       const next = { assigned: ['picked', '确认取件'], picked: ['delivering', '开始配送'], delivering: ['delivered', '确认交接'] }[order.status];
       this.setData({
-        order, nextStatus: next ? next[0] : '', nextLabel: next ? next[1] : '',
+        order, nextStatus: next ? next[0] : '', nextLabel: next ? next[1] : '', lastUpdated: new Date().toLocaleTimeString('zh-CN'),
         canCancel: this.data.role === 'student' && order.status === 'pending',
         canConfirm: this.data.role === 'student' && order.status === 'delivered',
         canProgress: this.data.role === 'courier' && Boolean(next),

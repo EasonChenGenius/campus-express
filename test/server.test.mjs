@@ -109,6 +109,32 @@ test('本机网页可读取新主题样式', async t => {
   assert.match(await script.text(), /prepareOrderRequest/);
 });
 
+test('代取员虚构申请必须由本校区后台审核，通过后默认下线', async t => {
+  const { request, login, db } = await setup(t);
+  const [studentCL, studentSZ, managerCL, admin, runner] = await Promise.all(['student-a','student-b','manager-cl','admin','runner-cl-1'].map(login));
+  assert.equal((await request('/api/courier-applications/me', studentCL)).body.status, 'none');
+  assert.equal((await request('/api/courier-applications', runner, 'POST', {})).status, 403);
+  assert.equal((await request('/api/courier-applications', studentCL, 'POST', { role: 'admin', approved: true, campus: 'shizishan' })).status, 201);
+  assert.equal((await request('/api/courier-applications', studentCL, 'POST', {})).status, 409);
+  assert.equal((await request('/api/courier-applications', studentSZ, 'POST', {})).status, 201);
+  assert.equal((await request('/api/courier-applications', managerCL)).body.length, 1);
+  assert.equal((await request('/api/courier-applications/student-b/review', managerCL, 'POST', { approved: true })).status, 404);
+  assert.equal((await request('/api/courier-applications/student-a/review', studentCL, 'POST', { approved: true })).status, 403);
+  const reviewed = await Promise.all(Array.from({ length: 2 }, () => request('/api/courier-applications/student-a/review', managerCL, 'POST', { approved: true })));
+  assert.equal(reviewed.filter(x => x.status === 200).length, 1);
+  assert.equal(reviewed.filter(x => x.status === 409).length, 1);
+  const courierId = reviewed.find(x => x.status === 200).body.courier_id;
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM users WHERE id LIKE 'demo-courier-%'").get().count, 1);
+  assert.equal((await request('/api/courier-applications/me', studentCL)).body.status, 'approved');
+  assert.ok((await request('/api/demo/accounts')).body.some(x => x.id === courierId));
+  const courierToken = await login(courierId);
+  const availability = (await request('/api/couriers/me/availability', courierToken)).body;
+  assert.equal(availability.approved, true);
+  assert.equal(availability.online, false);
+  assert.equal((await request('/api/courier-applications/student-b/review', admin, 'POST', { approved: false })).body.status, 'rejected');
+  assert.equal((await request('/api/courier-applications', studentSZ, 'POST', {})).status, 201);
+});
+
 test('测试会话可主动退出且 30 分钟后自动失效', async t => {
   let clock = Date.UTC(2026, 9, 23, 1);
   const { request, login } = await setup(t, { sessionClock: () => clock });
@@ -315,8 +341,8 @@ test('相同请求编号只重试同一订单内容，错误响应提供稳定�
   assert.equal(unauthorized.status, 401);
   assert.equal(unauthorized.body.code, 'UNAUTHORIZED');
   const capabilities = await request('/api/capabilities');
-  assert.equal(capabilities.body.version, '0.6.1');
-  assert.equal(capabilities.body.apiContract, 8);
+  assert.equal(capabilities.body.version, '0.7.0');
+  assert.equal(capabilities.body.apiContract, 9);
   assert.equal(capabilities.body.closedPilotReady, false);
 });
 

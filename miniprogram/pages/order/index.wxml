@@ -2,6 +2,7 @@
   <view class="banner">订单详情仅用于测试 · 虚构取件码 · 未付款</view>
   <view class="title">订单详情</view>
   <button class="button button-secondary" bindtap="refresh" disabled="{{loading}}">刷新状态</button>
+  <view class="muted">页面可见时约每 15 秒同步；最近更新 {{lastUpdated || '尚未成功同步'}}。关键操作前请以服务端返回为准。</view>
   <view class="error" wx:if="{{error}}">{{error}}</view>
   <view class="card" wx:if="{{order}}">
     <view class="row"><text class="card-title">{{order.campusName}} · {{order.zone}}{{order.building ? ' · ' + order.building : ''}}</text><text class="pill">{{order.statusName}}</text></view>

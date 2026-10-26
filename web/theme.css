@@ -63,6 +63,11 @@ button.danger:hover:not(:disabled){background:#fce1e6}
 .workspace-nav{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 0}
 .workspace-nav a{background:#fff;border:1px solid #dce3f2;border-radius:100px;padding:9px 14px;color:#41507b;text-decoration:none;font-size:12px;font-weight:800}
 .workspace-nav a:hover{background:#edf0fb;border-color:#a8b4dc}
+.application-status{background:#f4f6fb;border:1px solid #dfe4f0;border-radius:12px;padding:16px 18px;margin:16px 0;color:#455572;line-height:1.65}
+.subsection-title{font-size:16px;margin:22px 0 12px;color:#354360}
+.order-filter{display:flex;align-items:center;gap:10px;color:#53617d;font-size:13px;font-weight:700;margin:16px 0}
+.order-filter select{width:auto;min-width:148px;padding:9px 12px}
+.last-updated{font-size:12px;margin-top:5px!important}
 .section-panel{scroll-margin-top:24px}
 .section-heading{border-bottom-color:#e7ebf2}
 .section-symbol{background:#e8ebfa;color:#52629b}
@@ -100,7 +105,10 @@ button.danger:hover:not(:disabled){background:#fce1e6}
 #workspace .dashboard-head{order:0}
 #workspace .metrics{order:1}
 #workspace .workspace-nav{order:2}
-#workspace #student-create,#workspace #orders-panel,#workspace #courier-tools,#workspace #operations-panel,#workspace #slot-panel,#workspace #admin-tools,#workspace #audit-panel{order:4}
+#workspace #student-create,#workspace #orders-panel,#workspace #courier-tools,#workspace #operations-panel,#workspace #slot-panel,#workspace #admin-tools,#workspace #audit-panel,#workspace #courier-application-panel{order:4}
+#workspace[data-role="student"] #student-create{order:3}
+#workspace[data-role="student"] #orders-panel{order:4}
+#workspace[data-role="student"] #courier-application-panel{order:5}
 #workspace[data-role="manager"] #operations-panel,#workspace[data-role="admin"] #operations-panel{order:3}
 #workspace[data-role="manager"] #orders-panel,#workspace[data-role="admin"] #orders-panel{order:4}
 #workspace[data-role="manager"] #slot-panel,#workspace[data-role="admin"] #slot-panel{order:5}

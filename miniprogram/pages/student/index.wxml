@@ -40,7 +40,14 @@
     </view>
     <view class="notice" wx:if="{{pendingHint}}">上次提交结果未确认。保持表单内容不变重试，系统会使用同一请求编号。</view>
     <view class="error" wx:if="{{error}}">{{error}}</view>
-    <button class="button" disabled="{{busy || !stations.length}}" bindtap="submit">{{busy ? '提交中…' : '创建测试订单'}}</button>
+    <button class="button" disabled="{{busy || !stations.length || !zones.length || !slots.length}}" bindtap="submit">{{busy ? '提交中…' : '创建测试订单'}}</button>
     <view class="muted">模拟报价由服务器生成；此处不会收费。</view>
+  </view>
+  <view class="card">
+    <view class="section-kicker">代取员申请 · 仅供演示</view>
+    <view class="card-title">想成为代取员？</view>
+    <view class="muted">{{applicationText}}</view>
+    <button class="button button-secondary" wx:if="{{applicationStatus === 'none' || applicationStatus === 'rejected'}}" disabled="{{busy}}" bindtap="applyCourier">提交虚构申请</button>
+    <view class="muted">不收集真实姓名、证件或手机号；正式版必须完成微信身份绑定、人工审核和站点授权。</view>
   </view>
 </view>

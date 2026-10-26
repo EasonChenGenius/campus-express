@@ -68,6 +68,11 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
     phone TEXT NOT NULL, purpose TEXT NOT NULL, code_hash TEXT NOT NULL,
     expires_at INTEGER NOT NULL, sent_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY(phone,purpose)
+  );
+  CREATE TABLE IF NOT EXISTS courier_applications (
+    student_id TEXT PRIMARY KEY REFERENCES users(id), campus TEXT NOT NULL,
+    status TEXT NOT NULL, courier_id TEXT REFERENCES users(id),
+    created_at TEXT NOT NULL, reviewed_at TEXT, reviewed_by TEXT REFERENCES users(id)
   );`);
   const userColumns = new Set(db.prepare('PRAGMA table_info(users)').all().map(c => c.name));
   if (!userColumns.has('online')) db.exec('ALTER TABLE users ADD COLUMN online INTEGER NOT NULL DEFAULT 1');
@@ -170,8 +175,11 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : url.pathname.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });
         res.end(content); return;
       }
-      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.6.1', apiContract: 8, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, realSms: false, closedPilotReady: false });
-      if (req.method === 'GET' && url.pathname === '/api/demo/accounts') return send(res, 200, fixtures.map(([id, name, role, campus]) => ({ id, name, role, campus })));
+      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.7.0', apiContract: 9, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, realSms: false, closedPilotReady: false });
+      if (req.method === 'GET' && url.pathname === '/api/demo/accounts') {
+        const added = db.prepare("SELECT u.id,u.name,u.role,u.campus FROM courier_applications a JOIN users u ON u.id=a.courier_id WHERE a.status='approved'").all();
+        return send(res, 200, [...fixtures.map(([id, name, role, campus]) => ({ id, name, role, campus })), ...added]);
+      }
       if (req.method === 'POST' && url.pathname === '/api/demo/send-code') {
         const { phone, purpose } = await bodyOf(req);
         if (!validDemoPhone(phone) || !['register','reset'].includes(purpose)) fail(400,'只能使用 TEST- 开头的演示号码');
@@ -247,6 +255,56 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         return send(res, 200, { ok: true });
       }
       if (req.method === 'GET' && url.pathname === '/api/me') return send(res, 200, user);
+      if (url.pathname === '/api/courier-applications/me') {
+        requireRole(user, 'student');
+        if (req.method !== 'GET') fail(405, '不支持的操作');
+        const application = db.prepare('SELECT campus,status,courier_id,created_at,reviewed_at FROM courier_applications WHERE student_id=?').get(user.id);
+        return send(res, 200, application || { status: 'none' });
+      }
+      if (url.pathname === '/api/courier-applications' && req.method === 'POST') {
+        requireRole(user, 'student');
+        await bodyOf(req);
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          const previous = db.prepare('SELECT status FROM courier_applications WHERE student_id=?').get(user.id);
+          if (previous?.status === 'pending') fail(409, '申请正在等待本校区主管审核');
+          if (previous?.status === 'approved') fail(409, '申请已通过，请使用代取员测试身份进入');
+          db.prepare("INSERT INTO courier_applications(student_id,campus,status,created_at) VALUES (?,?,'pending',?) ON CONFLICT(student_id) DO UPDATE SET status='pending',courier_id=NULL,created_at=excluded.created_at,reviewed_at=NULL,reviewed_by=NULL")
+            .run(user.id,user.campus,now());
+          db.exec('COMMIT');
+        } catch (error) { db.exec('ROLLBACK'); throw error; }
+        audit(user.id, 'courier_application_submitted', null, user.id);
+        return send(res, 201, { status: 'pending', campus: user.campus });
+      }
+      if (url.pathname === '/api/courier-applications' && req.method === 'GET') {
+        requireRole(user, 'admin', 'manager');
+        const rows = user.role === 'admin'
+          ? db.prepare('SELECT student_id,campus,status,created_at,reviewed_at FROM courier_applications ORDER BY created_at DESC').all()
+          : db.prepare('SELECT student_id,campus,status,created_at,reviewed_at FROM courier_applications WHERE campus=? ORDER BY created_at DESC').all(user.campus);
+        return send(res, 200, rows);
+      }
+      const review = url.pathname.match(/^\/api\/courier-applications\/([a-z0-9-]+)\/review$/);
+      if (req.method === 'POST' && review) {
+        requireRole(user, 'admin', 'manager');
+        const { approved } = await bodyOf(req);
+        if (typeof approved !== 'boolean') fail(400, '审核结果无效');
+        let courierId = null, application;
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          application = db.prepare('SELECT * FROM courier_applications WHERE student_id=?').get(review[1]);
+          if (!application || (user.role === 'manager' && application.campus !== user.campus)) fail(404, '申请不存在');
+          if (application.status !== 'pending') fail(409, '申请状态已变化，请刷新');
+          if (approved) {
+            courierId = `demo-courier-${randomUUID()}`;
+            db.prepare("INSERT INTO users(id,name,role,campus,approved,online) VALUES (?,'申请代取员（测试）','courier',?,1,0)").run(courierId,application.campus);
+          }
+          db.prepare('UPDATE courier_applications SET status=?,courier_id=?,reviewed_at=?,reviewed_by=? WHERE student_id=? AND status=?')
+            .run(approved ? 'approved' : 'rejected',courierId,now(),user.id,application.student_id,'pending');
+          db.exec('COMMIT');
+        } catch (error) { db.exec('ROLLBACK'); throw error; }
+        audit(user.id, approved ? 'courier_application_approved' : 'courier_application_rejected', null, application.student_id);
+        return send(res, 200, { status: approved ? 'approved' : 'rejected', campus: application.campus, courier_id: courierId });
+      }
       if (url.pathname === '/api/couriers/me/availability') {
         requireRole(user, 'courier');
         if (req.method === 'GET') return send(res, 200, { online: Boolean(user.online), approved: Boolean(user.approved), maxActive: user.max_active, activeCount: activeCount(user.id) });
@@ -465,5 +523,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const { port = 3000, host = '127.0.0.1' } = { port: Number(process.env.PORT || 3000) };
   if (host !== '127.0.0.1') throw Error('本地演示仅允许 127.0.0.1');
   await mkdir(join(root, 'data'), { recursive: true });
-  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.6.1 本地演示：http://${host}:${port}`));
+  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.7.0 本地演示：http://${host}:${port}`));
 }

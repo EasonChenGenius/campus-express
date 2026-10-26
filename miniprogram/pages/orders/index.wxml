@@ -5,6 +5,7 @@
     <button class="button button-secondary" bindtap="openCreate">返回下单</button>
     <button class="button button-secondary" bindtap="refresh" disabled="{{loading}}">刷新</button>
   </view>
+  <view class="muted">页面可见时约每 15 秒同步；最近更新 {{lastUpdated || '尚未成功同步'}}。</view>
   <view class="error" wx:if="{{error}}">{{error}}</view>
   <view class="muted" wx:if="{{empty}}">还没有测试订单。</view>
   <view class="card" wx:for="{{orders}}" wx:key="id" data-id="{{item.id}}" bindtap="openOrder">

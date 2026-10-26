@@ -7,9 +7,9 @@ const campusName = { chenglong: '成龙校区', shizishan: '狮子山校区' };
 const statusName = { pending: '待接单', assigned: '已接单', picked: '已取件', delivering: '配送中', delivered: '待学生确认', exception: '待处理异常', completed: '已完成', cancelled: '已取消', closed: '异常已关闭' };
 const reasonName = { pickup_failed: '取件失败', damaged: '包裹破损', student_unavailable: '学生暂无法交接', other: '其他异常' };
 const resolutionName = { resume: '核实后恢复原进度', retry: '确认尚未取件，重新开放接单', close: '人工关闭异常订单' };
-const actionName = { demo_order_created: '创建测试订单', accept: '代取员接单', assign: '人工派单', progress_picked: '已取件', progress_delivering: '开始配送', progress_delivered: '已交接', confirm: '学生确认', cancel: '学生取消', courier_approved: '代取员审核通过', courier_suspended: '代取员暂停', courier_online: '代取员上线', courier_offline: '代取员下线', courier_capacity_updated: '调整接单上限', exception_reported: '异常上报', exception_resume: '异常恢复', exception_retry: '重新开放接单', exception_close: '关闭异常订单' };
+const actionName = { demo_order_created: '创建测试订单', accept: '代取员接单', assign: '人工派单', progress_picked: '已取件', progress_delivering: '开始配送', progress_delivered: '已交接', confirm: '学生确认', cancel: '学生取消', courier_approved: '代取员审核通过', courier_suspended: '代取员暂停', courier_online: '代取员上线', courier_offline: '代取员下线', courier_capacity_updated: '调整接单上限', courier_application_submitted: '提交代取员申请', courier_application_approved: '通过代取员申请', courier_application_rejected: '拒绝代取员申请', exception_reported: '异常上报', exception_resume: '异常恢复', exception_retry: '重新开放接单', exception_close: '关闭异常订单' };
 const slotName = value => /^\d{4}-\d{2}-\d{2}T\d{2}:00:00\+08:00$/.test(value) ? `${value.slice(5, 10)} ${value.slice(11, 16)}–${String(Number(value.slice(11, 13)) + 1).padStart(2, '0')}:00` : ({ 'today-evening': '旧版：今日傍晚', 'tomorrow-noon': '旧版：明日中午' }[value] || value);
-let token = '', me = null, catalog = null, couriers = [], availability = null, orderSubmitting = false;
+let token = '', me = null, catalog = null, couriers = [], availability = null, allOrders = [], orderSubmitting = false, automaticRefresh = false;
 const pendingOrderKey = user => `campus-express-pending-order-${user.id}`;
 
 async function api(path, options = {}) {
@@ -35,6 +35,7 @@ async function api(path, options = {}) {
 function message(text, error = false) { $('message').textContent = text; $('message').classList.toggle('error', error); }
 function authMessage(text, error = false) { $('auth-message').textContent = text; $('auth-message').classList.toggle('error', error); }
 async function perform(work, success) { try { await work(); message(success); await refresh(); return true; } catch (error) { if (error.status === 409) await refresh().catch(() => {}); message(error.message, true); return false; } }
+async function refreshOnly(success) { try { await refresh(); message(success); } catch (error) { message(error.message, true); } }
 
 async function clearOldSession() {
   if (!token) return;
@@ -46,13 +47,15 @@ async function clearOldSession() {
 function enterSession(result) {
     token = result.token; me = result.user; $('workspace').hidden = false;
     $('workspace').dataset.role = me.role;
-    const navigation = me.role === 'student' ? [['student-create', '预约代取'], ['orders-panel', '我的订单']]
+    $('order-filter').value = 'all';
+    const navigation = me.role === 'student' ? [['student-create', '预约代取'], ['orders-panel', '我的订单'], ['courier-application-panel', '申请代取员']]
       : me.role === 'courier' ? [['orders-panel', '任务池与进度'], ['courier-tools', '接单状态']]
       : [['operations-panel', '异常待办'], ['orders-panel', '订单管理'], ['slot-panel', '时段容量'], ['admin-tools', '代取员审核'], ['audit-panel', '操作记录']];
     $('workspace-nav').innerHTML = navigation.map(([id, label]) => `<a href="#${id}">${label}</a>`).join('');
     $('who').textContent = me.name;
     $('scope').textContent = me.role === 'admin' ? '总管理员 · 双校区测试订单' : `${{ student: '学生', courier: '代取员', manager: '校区主管' }[me.role]} · 仅限${campusName[me.campus]}测试数据`;
     $('student-create').hidden = me.role !== 'student';
+    $('courier-application-panel').hidden = me.role !== 'student';
     $('admin-tools').hidden = !['admin', 'manager'].includes(me.role);
     $('operations-panel').hidden = !['admin', 'manager'].includes(me.role);
     $('slot-panel').hidden = !['admin', 'manager'].includes(me.role);
@@ -143,10 +146,16 @@ function exceptionControl(o) {
 function orderCard(o) {
   const privateDetails = o.handoff ? `<p>当面交接位置：${escapeHtml(o.handoff)}</p>` : '<p>接单后可查看当面交接位置</p>';
   const code = o.pickup_code ? `<p>虚构取件码：<strong>${escapeHtml(o.pickup_code)}</strong></p>` : '';
-  return `<article class="card order-card" data-status="${escapeHtml(o.status)}"><div class="card-head"><strong>📦 ${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)}${o.building ? ' · ' + escapeHtml(o.building) : ''}</strong><span class="tag">${escapeHtml(statusName[o.status] || o.status)}</span></div>
+  return `<article class="card order-card" data-order-id="${escapeHtml(o.id)}" data-status="${escapeHtml(o.status)}"><div class="card-head"><strong>📦 ${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)}${o.building ? ' · ' + escapeHtml(o.building) : ''}</strong><span class="tag">${escapeHtml(statusName[o.status] || o.status)}</span></div>
     <p>测试点：${escapeHtml(catalog.stations.find(s => s.id === o.station_id)?.name || o.station_id)} · ${o.qty} 件 · ${escapeHtml(slotName(o.slot))}</p>${privateDetails}${code}
     ${o.exception ? `<p class="exception-note">异常已暂停履约：${escapeHtml(reasonName[o.exception.reason] || o.exception.reason)}；等待本校区管理员核实。</p>` : ''}${o.lastResolution ? `<p class="meta">最近一次异常处理：${escapeHtml(reasonName[o.lastResolution.reason] || o.lastResolution.reason)} → ${escapeHtml(resolutionName[o.lastResolution.resolution] || o.lastResolution.resolution)} · ${escapeHtml(new Date(o.lastResolution.resolved_at).toLocaleString('zh-CN'))}</p>` : ''}<p class="meta">订单 ${escapeHtml(o.id.slice(0, 8))} · ${escapeHtml(new Date(o.created_at).toLocaleString('zh-CN'))} · ${o.courier_id ? `代取员 ${escapeHtml(o.courier_id)}` : '尚未指派'}</p>
     <div class="card-foot"><strong>模拟报价 ¥${(o.amount_cents / 100).toFixed(2)} · 未支付</strong><div class="actions">${orderActions(o)}</div></div></article>`;
+}
+function renderOrders() {
+  const filter = $('order-filter').value;
+  const visible = allOrders.filter(o => filter === 'all' || (filter === 'active' && ['assigned','picked','delivering','delivered'].includes(o.status)) || (filter === 'finished' && ['completed','cancelled','closed'].includes(o.status)) || o.status === filter);
+  $('order-count').textContent = `${visible.length}/${allOrders.length} 单`;
+  $('orders').innerHTML = visible.length ? visible.map(orderCard).join('') : '<div class="empty">当前筛选下没有测试订单</div>';
 }
 async function refresh() {
   if (!me) return;
@@ -168,22 +177,31 @@ async function refresh() {
     $('slot').innerHTML = catalog.slots.length ? catalog.slots.map(s => `<option value="${escapeHtml(s.value)}">${escapeHtml(s.label)} · 剩余 ${s.remaining} 个名额</option>`).join('') : '<option value="">暂无可预约时段</option>';
     if (catalog.slots.some(s => s.value === previousSlot)) $('slot').value = previousSlot;
     updateHandoffPreview();
+    const application = await api('/api/courier-applications/me');
+    const statusText = { none: '尚未申请。提交后由本校区主管审核，不能自行获得接单权限。', pending: '申请待本校区主管审核；审核前无法接单。', approved: '测试申请已通过。可在上方测试账号中选择“申请代取员（测试）”进入代取员端；正式版仍需可信身份绑定。', rejected: '申请未通过。可修改准备材料后重新申请；演示版不收集真实材料。' };
+    $('courier-application-status').textContent = statusText[application.status] || '申请状态暂不可用，请刷新。';
+    $('apply-courier').disabled = !['none', 'rejected'].includes(application.status);
+    if (application.status === 'approved') await loadAccounts();
   }
   if (['admin', 'manager'].includes(me.role)) {
+    const applications = await api('/api/courier-applications');
+    const pendingApplications = applications.filter(a => a.status === 'pending');
+    $('courier-applications').innerHTML = pendingApplications.length ? pendingApplications.map(a => `<div class="card card-head"><span><strong>${escapeHtml(campusName[a.campus])} · 虚构申请</strong><br><span class="meta">申请编号 ${escapeHtml(a.student_id.slice(0, 8))} · ${escapeHtml(new Date(a.created_at).toLocaleString('zh-CN'))}</span></span><div class="actions"><button data-applicant="${escapeHtml(a.student_id)}" data-review="approve">通过测试申请</button><button class="danger" data-applicant="${escapeHtml(a.student_id)}" data-review="reject">驳回</button></div></div>`).join('') : '<div class="empty">目前没有待审核的虚构申请</div>';
     couriers = await api('/api/couriers');
     $('couriers').innerHTML = couriers.map(c => `<div class="card card-head"><span><strong>${escapeHtml(c.name)}</strong><br><span class="meta">${escapeHtml(campusName[c.campus])} · ${c.approved ? '已审核' : '待审核'} · ${c.online ? '在线' : '离线'} · 处理中 ${c.active_count}/${c.max_active}</span></span><div class="actions"><label class="capacity-label">上限 <select aria-label="${escapeHtml(c.name)}接单上限" data-capacity-select="${escapeHtml(c.id)}">${[1,2,3,4,5].map(n => `<option value="${n}" ${c.max_active === n ? 'selected' : ''}>${n} 单</option>`).join('')}</select></label><button class="secondary" data-courier="${escapeHtml(c.id)}" data-capacity="true">保存上限</button><button class="${c.approved ? 'danger' : ''}" data-courier="${escapeHtml(c.id)}" data-approved="${c.approved ? 'false' : 'true'}">${c.approved ? '暂停资格' : '审核通过'}</button></div></div>`).join('');
     const queue = await api('/api/operations/queue');
-    $('operations').innerHTML = `<div class="queue-summary">待处理异常 ${queue.exceptions.length} 单 · 超过 30 分钟无人接单 ${queue.overdue.length} 单</div><p class="meta">处理顺序：先确认包裹是否已取出和是否安全，再决定恢复、重新接单或关闭；已取件的异常不可直接重新接单。</p>${queue.exceptions.map(o => `<div class="card"><strong>${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)} · ${escapeHtml(reasonName[o.exception?.reason] || '')}</strong><p class="meta">订单 ${escapeHtml(o.id.slice(0,8))} · 已等待 ${Math.max(0, Math.floor((Date.now() - Date.parse(o.exception?.created_at)) / 60000))} 分钟 · 在下方订单管理中处理</p></div>`).join('')}${queue.overdue.map(o => `<div class="card"><strong>${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)} · 等待接单超时</strong><p class="meta">订单 ${escapeHtml(o.id.slice(0,8))} · 可在下方订单管理中人工派单</p></div>`).join('')}${!queue.exceptions.length && !queue.overdue.length ? '<div class="empty">目前没有后台待办</div>' : ''}`;
+    $('operations').innerHTML = `<div class="queue-summary">待处理异常 ${queue.exceptions.length} 单 · 超过 30 分钟无人接单 ${queue.overdue.length} 单</div><p class="meta">处理顺序：先确认包裹是否已取出和是否安全，再决定恢复、重新接单或关闭；已取件的异常不可直接重新接单。</p>${queue.exceptions.map(o => `<div class="card"><strong>${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)} · ${escapeHtml(reasonName[o.exception?.reason] || '')}</strong><p class="meta">订单 ${escapeHtml(o.id.slice(0,8))} · 已等待 ${Math.max(0, Math.floor((Date.now() - Date.parse(o.exception?.created_at)) / 60000))} 分钟</p><button class="secondary" data-focus-order="${escapeHtml(o.id)}">查看订单并处理</button></div>`).join('')}${queue.overdue.map(o => `<div class="card"><strong>${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)} · 等待接单超时</strong><p class="meta">订单 ${escapeHtml(o.id.slice(0,8))}</p><button class="secondary" data-focus-order="${escapeHtml(o.id)}">查看订单并派单</button></div>`).join('')}${!queue.exceptions.length && !queue.overdue.length ? '<div class="empty">目前没有后台待办</div>' : ''}`;
     const slotData = await api(`/api/slots/capacity?campus=${encodeURIComponent($('slot-campus').value)}`);
     $('slot-capacities').innerHTML = slotData.slots.map(s => `<div class="card card-head"><span><strong>${escapeHtml(s.label)}</strong><br><span class="meta">已预约 ${s.booked} · 剩余 ${s.remaining}</span></span><div class="actions"><label class="capacity-label">总名额 <input type="number" min="0" max="20" step="1" value="${s.capacity}" data-slot-capacity="${escapeHtml(s.value)}"></label><button class="secondary" data-slot="${escapeHtml(s.value)}">保存</button></div></div>`).join('') || '<div class="empty">今天和明天没有未来时段</div>';
     const logs = await api('/api/audit');
     $('audit').innerHTML = logs.length ? logs.slice(0, 20).map(a => `<div class="audit-line">${escapeHtml(new Date(a.at).toLocaleString('zh-CN'))} · ${escapeHtml(a.actor_id)} · ${escapeHtml(actionName[a.action] || a.action)} ${a.order_id ? '· 订单 ' + escapeHtml(a.order_id.slice(0, 8)) : ''}</div>`).join('') : '<div class="empty">暂无操作记录</div>';
   }
-  $('order-count').textContent = `${orders.length} 单`;
+  allOrders = orders;
   $('metric-total').textContent = orders.length;
   $('metric-pending').textContent = orders.filter(o => o.status === 'pending').length;
   $('metric-complete').textContent = orders.filter(o => o.status === 'completed').length;
-  $('orders').innerHTML = orders.length ? orders.map(orderCard).join('') : '<div class="empty">目前没有测试订单</div>';
+  renderOrders();
+  $('last-updated').textContent = `最近同步：${new Date().toLocaleTimeString('zh-CN')} · ${me?.role === 'courier' ? '页面可见时约每 15 秒同步' : '点击刷新获取最新状态'}`;
 }
 async function createOrder(event) {
   event.preventDefault();
@@ -210,7 +228,16 @@ async function createOrder(event) {
 async function handleClick(event) {
   const button = event.target.closest('button');
   if (!button) return;
-  const { id, action, next, courier, approved, capacity, resolution, slot } = button.dataset;
+  const { id, action, next, courier, approved, capacity, resolution, slot, applicant, review, focusOrder } = button.dataset;
+  if (focusOrder) {
+    $('order-filter').value = 'all'; renderOrders();
+    document.querySelector(`[data-order-id="${focusOrder}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  if (applicant && review) return perform(async () => {
+    await api(`/api/courier-applications/${applicant}/review`, { method: 'POST', body: JSON.stringify({ approved: review === 'approve' }) });
+    await loadAccounts();
+  }, review === 'approve' ? '虚构申请已通过；新代取员默认下线' : '虚构申请已驳回');
   if (slot) return perform(() => api('/api/slots/capacity', { method: 'POST', body: JSON.stringify({ campus: $('slot-campus').value, slot, capacity: Number(document.querySelector(`[data-slot-capacity="${slot}"]`).value) }) }), '时段容量已更新');
   if (courier && capacity) return perform(() => api(`/api/couriers/${courier}/capacity`, { method: 'POST', body: JSON.stringify({ maxActive: Number(document.querySelector(`[data-capacity-select="${courier}"]`).value) }) }), '接单上限已更新');
   if (courier) return perform(() => api(`/api/couriers/${courier}/approval`, { method: 'POST', body: JSON.stringify({ approved: approved === 'true' }) }), '审核状态已更新');
@@ -226,11 +253,16 @@ async function handleClick(event) {
   }
   await perform(() => api(`/api/orders/${id}/${action}`, { method: 'POST', ...(body ? { body: JSON.stringify(body) } : { body: '{}' }) }), '订单状态已更新');
 }
+async function loadAccounts() {
+  const current = $('account').value;
+  const accounts = await api('/api/demo/accounts');
+  $('account').innerHTML = accounts.map(a => `<option value="${escapeHtml(a.id)}" data-role="${escapeHtml(a.role)}">${escapeHtml(a.name)} · ${{ student: '学生', courier: '代取员', manager: '校区主管', admin: '总管理员' }[a.role]}</option>`).join('');
+  if (accounts.some(a => a.id === current)) $('account').value = current;
+  $('login').disabled = accounts.length === 0;
+}
 async function init() {
   try {
-    const accounts = await api('/api/demo/accounts');
-    $('account').innerHTML = accounts.map(a => `<option value="${escapeHtml(a.id)}" data-role="${escapeHtml(a.role)}">${escapeHtml(a.name)} · ${{ student: '学生', courier: '代取员', manager: '校区主管', admin: '总管理员' }[a.role]}</option>`).join('');
-    $('login').disabled = accounts.length === 0;
+    await loadAccounts();
   } catch (error) { message(error.message, true); }
   $('login').addEventListener('click', login);
   $('account').addEventListener('change', () => {
@@ -245,13 +277,21 @@ async function init() {
   document.querySelectorAll('[data-auth-tab]').forEach(button => button.addEventListener('click', () => setAuthTab(button.dataset.authTab)));
   document.querySelectorAll('.auth-form').forEach(form => form.addEventListener('submit', studentAuthSubmit));
   document.querySelectorAll('[data-code-purpose]').forEach(button => button.addEventListener('click', showDemoCode));
-  $('refresh').addEventListener('click', () => perform(refresh, '数据已刷新'));
-  $('slot-campus').addEventListener('change', () => perform(refresh, '已切换时段校区'));
+  $('refresh').addEventListener('click', () => refreshOnly('数据已刷新'));
+  $('slot-campus').addEventListener('change', () => refreshOnly('已切换时段校区'));
+  $('order-filter').addEventListener('change', renderOrders);
   $('toggle-availability').addEventListener('click', () => perform(() => api('/api/couriers/me/availability', { method: 'POST', body: JSON.stringify({ online: !availability.online }) }), '接单状态已更新'));
+  $('apply-courier').addEventListener('click', () => perform(() => api('/api/courier-applications', { method: 'POST', body: '{}' }), '虚构代取员申请已提交；等待本校区主管审核'));
   $('order-form').addEventListener('submit', createOrder);
   $('zone').addEventListener('change', updateHandoffPreview);
   $('building').addEventListener('change', updateHandoffPreview);
   $('workspace').addEventListener('click', handleClick);
+  window.setInterval(async () => {
+    if (document.visibilityState !== 'visible' || me?.role !== 'courier' || automaticRefresh || orderSubmitting) return;
+    automaticRefresh = true;
+    try { await refresh(); } catch (error) { message(`任务自动同步失败：${error.message}`, true); }
+    finally { automaticRefresh = false; }
+  }, 15000);
 }
 init();
 

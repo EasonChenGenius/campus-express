@@ -5,6 +5,7 @@
     <button class="button button-secondary" bindtap="refresh" disabled="{{loading}}">刷新任务</button>
     <button class="button button-secondary" bindtap="switchAccount">切换测试身份</button>
   </view>
+  <view class="muted">页面可见时约每 15 秒同步任务；最近更新 {{lastUpdated || '尚未成功同步'}}。离开页面后暂停，请返回时核对最新状态。</view>
   <view class="card" wx:if="{{availability}}"><view class="card-title">接单能力</view><view>{{availability.online ? '已上线' : '已下线'}} · 同时处理 {{availability.activeCount}}/{{availability.maxActive}} 单</view><button class="button button-secondary" disabled="{{busy || (!availability.approved && !availability.online)}}" bindtap="toggleAvailability">{{availability.online ? '下线暂停新接单' : '上线接单'}}</button></view>
   <view class="error" wx:if="{{error}}">{{error}}</view>
   <view class="section-kicker section-gap">任务池</view><view class="card-title">本校区待接单 {{pool.length}}</view>

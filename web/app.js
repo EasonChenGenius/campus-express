@@ -7,9 +7,10 @@ const campusName = { chenglong: '成龙校区', shizishan: '狮子山校区' };
 const statusName = { pending: '待接单', assigned: '已接单', picked: '已取件', delivering: '配送中', delivered: '待学生确认', exception: '待处理异常', completed: '已完成', cancelled: '已取消', closed: '异常已关闭' };
 const reasonName = { pickup_failed: '取件失败', damaged: '包裹破损', student_unavailable: '学生暂无法交接', other: '其他异常' };
 const resolutionName = { resume: '核实后恢复原进度', retry: '确认尚未取件，重新开放接单', close: '人工关闭异常订单' };
-const actionName = { demo_order_created: '创建测试订单', accept: '代取员接单', assign: '人工派单', progress_picked: '已取件', progress_delivering: '开始配送', progress_delivered: '已交接', confirm: '学生确认', cancel: '学生取消', courier_approved: '代取员审核通过', courier_suspended: '代取员暂停', courier_online: '代取员上线', courier_offline: '代取员下线', courier_capacity_updated: '调整接单上限', courier_application_submitted: '提交代取员申请', courier_application_approved: '通过代取员申请', courier_application_rejected: '拒绝代取员申请', exception_reported: '异常上报', exception_resume: '异常恢复', exception_retry: '重新开放接单', exception_close: '关闭异常订单' };
+const actionName = { demo_order_created: '创建测试订单', demo_handoff_code_issued: '学生生成交接码', accept: '代取员接单', assign: '人工派单', progress_picked: '已取件', progress_delivering: '开始配送', progress_delivered: '已交接', confirm: '学生确认', cancel: '学生取消', courier_approved: '代取员审核通过', courier_suspended: '代取员暂停', courier_online: '代取员上线', courier_offline: '代取员下线', courier_capacity_updated: '调整接单上限', courier_application_submitted: '提交代取员申请', courier_application_approved: '通过代取员申请', courier_application_rejected: '拒绝代取员申请', exception_reported: '异常上报', exception_resume: '异常恢复', exception_retry: '重新开放接单', exception_close: '关闭异常订单' };
 const slotName = value => /^\d{4}-\d{2}-\d{2}T\d{2}:00:00\+08:00$/.test(value) ? `${value.slice(5, 10)} ${value.slice(11, 16)}–${String(Number(value.slice(11, 13)) + 1).padStart(2, '0')}:00` : ({ 'today-evening': '旧版：今日傍晚', 'tomorrow-noon': '旧版：明日中午' }[value] || value);
 let token = '', me = null, catalog = null, couriers = [], availability = null, allOrders = [], orderSubmitting = false, automaticRefresh = false;
+const visibleHandoffCodes = new Map();
 const pendingOrderKey = user => `campus-express-pending-order-${user.id}`;
 
 async function api(path, options = {}) {
@@ -25,6 +26,7 @@ async function api(path, options = {}) {
     if (response.status === 401 && token) {
       if (me) clearOrderRequest(sessionStorage, pendingOrderKey(me));
       token = ''; me = null; $('workspace').hidden = true;
+      visibleHandoffCodes.clear();
       error.message = '测试身份已失效，请重新选择身份并进入演示。';
       document.getElementById('experience').scrollIntoView({ block: 'start' });
     }
@@ -42,6 +44,7 @@ async function clearOldSession() {
   try { await api('/api/session/logout', { method: 'POST' }); } catch {}
   if (me) clearOrderRequest(sessionStorage, pendingOrderKey(me));
   token = ''; me = null;
+  visibleHandoffCodes.clear();
   $('workspace').hidden = true;
 }
 function enterSession(result) {
@@ -124,13 +127,15 @@ function orderActions(o) {
   if (['admin', 'manager'].includes(me.role) && ['assigned', 'picked', 'delivering', 'delivered'].includes(o.status)) return exceptionControl(o);
   if (me.role === 'student') {
     if (o.status === 'pending') return `<button class="secondary" data-id="${o.id}" data-action="cancel">取消</button>`;
+    if (o.status === 'delivering') return `<button class="secondary" data-id="${o.id}" data-action="handoff-code">生成演示交接码</button>`;
     if (o.status === 'delivered') return `<button data-id="${o.id}" data-action="confirm">确认收货</button>${exceptionControl(o)}`;
   }
   if (me.role === 'courier') {
     if (o.status === 'pending') return `<button data-id="${o.id}" data-action="accept" ${!availability?.online || availability.activeCount >= availability.maxActive ? 'disabled' : ''}>接单</button>`;
     if (o.courier_id === me.id) {
       const next = { assigned: 'picked', picked: 'delivering', delivering: 'delivered' }[o.status];
-      if (next) return `<button data-id="${o.id}" data-action="progress" data-next="${next}">${{ picked: '确认取件', delivering: '开始配送', delivered: '确认交接' }[next]}</button>${exceptionControl(o)}`;
+      if (next === 'delivered') return `<label class="code-field">学生当面提供的 6 位交接码<input inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" placeholder="输入交接码" aria-label="交接码" data-handoff-input="${o.id}"></label><button data-id="${o.id}" data-action="progress" data-next="delivered">确认交接</button>${exceptionControl(o)}`;
+      if (next) return `<button data-id="${o.id}" data-action="progress" data-next="${next}">${{ picked: '确认取件', delivering: '开始配送' }[next]}</button>${exceptionControl(o)}`;
       if (o.status === 'delivered') return exceptionControl(o);
     }
   }
@@ -149,6 +154,7 @@ function orderCard(o) {
   const code = codes.length ? `<p>虚构取件码：${codes.map((value, index) => `<strong>第${index + 1}件 ${escapeHtml(value)}</strong>`).join(' · ')}</p>` : '';
   return `<article class="card order-card" data-order-id="${escapeHtml(o.id)}" data-status="${escapeHtml(o.status)}"><div class="card-head"><strong>📦 ${escapeHtml(campusName[o.campus])} · ${escapeHtml(o.zone)}${o.building ? ' · ' + escapeHtml(o.building) : ''}</strong><span class="tag">${escapeHtml(statusName[o.status] || o.status)}</span></div>
     <p>测试点：${escapeHtml(catalog.stations.find(s => s.id === o.station_id)?.name || o.station_id)} · ${o.qty} 件 · ${escapeHtml(slotName(o.slot))}</p>${privateDetails}${code}
+    ${me.role === 'student' && o.status === 'delivering' ? `<p class="meta">见到代取员并核对包裹后再生成交接码，当面告知；5 分钟内有效。</p>${visibleHandoffCodes.has(o.id) ? `<p class="exception-note">本次演示交接码：<strong>${escapeHtml(visibleHandoffCodes.get(o.id))}</strong>（仅当前页面显示）</p>` : ''}` : ''}
     ${o.exception ? `<p class="exception-note">异常已暂停履约：${escapeHtml(reasonName[o.exception.reason] || o.exception.reason)}；等待本校区管理员核实。</p>` : ''}${o.lastResolution ? `<p class="meta">最近一次异常处理：${escapeHtml(reasonName[o.lastResolution.reason] || o.lastResolution.reason)} → ${escapeHtml(resolutionName[o.lastResolution.resolution] || o.lastResolution.resolution)} · ${escapeHtml(new Date(o.lastResolution.resolved_at).toLocaleString('zh-CN'))}</p>` : ''}<p class="meta">订单 ${escapeHtml(o.id.slice(0, 8))} · ${escapeHtml(new Date(o.created_at).toLocaleString('zh-CN'))} · ${o.courier_id ? `代取员 ${escapeHtml(o.courier_id)}` : '尚未指派'}</p>
     <div class="card-foot"><strong>模拟报价 ¥${(o.amount_cents / 100).toFixed(2)} · 未支付</strong><div class="actions">${orderActions(o)}</div></div></article>`;
 }
@@ -251,7 +257,18 @@ async function handleClick(event) {
   if (!id || !action) return;
   let body;
   if (action === 'assign') body = { courierId: document.querySelector(`[data-select="${id}"]`).value };
-  if (action === 'progress') body = { status: next };
+  if (action === 'handoff-code') return perform(async () => {
+    const result = await api(`/api/orders/${id}/handoff-code`, { method: 'POST', body: '{}' });
+    visibleHandoffCodes.set(id, result.demoHandoffCode);
+  }, '演示交接码已生成；请当面告知代取员');
+  if (action === 'progress') {
+    body = { status: next };
+    if (next === 'delivered') {
+      const handoffCode = document.querySelector(`[data-handoff-input="${id}"]`)?.value.trim() || '';
+      if (!/^\d{6}$/.test(handoffCode)) return message('请输入学生当面提供的 6 位交接码。', true);
+      body.handoffCode = handoffCode;
+    }
+  }
   if (action === 'exception') body = { reason: document.querySelector(`[data-reason-select="${id}"]`).value };
   if (action === 'resolve') {
     const warning = resolution === 'close' ? '确认已核实包裹去向并人工关闭此测试异常单？关闭后不能继续配送。' : resolution === 'retry' ? '确认代取员尚未取出包裹，并重新开放给本校区接单？' : '确认异常已核实，可以恢复原配送进度？';
@@ -296,7 +313,8 @@ async function init() {
   $('building').addEventListener('change', updateHandoffPreview);
   $('workspace').addEventListener('click', handleClick);
   window.setInterval(async () => {
-    if (document.visibilityState !== 'visible' || me?.role !== 'courier' || automaticRefresh || orderSubmitting) return;
+    const handoffInput = document.querySelector('[data-handoff-input]');
+    if (document.visibilityState !== 'visible' || me?.role !== 'courier' || automaticRefresh || orderSubmitting || (handoffInput && (handoffInput === document.activeElement || handoffInput.value))) return;
     automaticRefresh = true;
     try { await refresh(); } catch (error) { message(`任务自动同步失败：${error.message}`, true); }
     finally { automaticRefresh = false; }

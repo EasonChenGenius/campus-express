@@ -80,6 +80,11 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
   const orderColumns = new Set(db.prepare('PRAGMA table_info(orders)').all().map(c => c.name));
   if (!orderColumns.has('building')) db.exec('ALTER TABLE orders ADD COLUMN building TEXT');
   if (!orderColumns.has('pickup_codes')) db.exec('ALTER TABLE orders ADD COLUMN pickup_codes TEXT');
+  if (!orderColumns.has('handoff_code_hash')) db.exec('ALTER TABLE orders ADD COLUMN handoff_code_hash TEXT');
+  if (!orderColumns.has('handoff_code_issued_at')) db.exec('ALTER TABLE orders ADD COLUMN handoff_code_issued_at INTEGER');
+  if (!orderColumns.has('handoff_code_attempts')) db.exec('ALTER TABLE orders ADD COLUMN handoff_code_attempts INTEGER NOT NULL DEFAULT 0');
+  // Handoff codes are keyed to this local demo process. After restart, require the student to issue a fresh code.
+  db.exec("UPDATE orders SET handoff_code_hash=NULL,handoff_code_issued_at=NULL,handoff_code_attempts=0 WHERE status='delivering'");
   const seed = db.prepare('INSERT OR IGNORE INTO users (id,name,role,campus,approved) VALUES (?,?,?,?,?)');
   for (const user of fixtures) seed.run(...user);
   const sessions = new Map();
@@ -90,6 +95,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
   const passwordHash = value => { const salt = randomBytes(16).toString('hex'); return salt + ':' + scryptSync(value,salt,64).toString('hex'); };
   const passwordMatches = (value, stored) => { const [salt,hex] = stored.split(':'); const candidate = scryptSync(value,salt,64); return timingSafeEqual(candidate,Buffer.from(hex,'hex')); };
   const codeHash = (phone,purpose,code) => createHmac('sha256',codeKey).update(`${phone}:${purpose}:${code}`).digest('hex');
+  const handoffCodeHash = (orderId,code) => createHmac('sha256',codeKey).update(`handoff:${orderId}:${code}`).digest('hex');
   const issueSession = user => {
     const token = randomBytes(32).toString('hex'), expiresAt = sessionClock() + sessionLifetimeMs;
     sessions.set(token,{ userId: user.id, expiresAt });
@@ -185,7 +191,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : url.pathname.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });
         res.end(content); return;
       }
-      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.7.1', apiContract: 10, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, realSms: false, closedPilotReady: false });
+      if (req.method === 'GET' && url.pathname === '/api/capabilities') return send(res, 200, { version: '0.8.0', apiContract: 11, mode: 'LOCAL_DEMO_ONLY', realOrders: false, realPayment: false, realAuthentication: false, realSms: false, closedPilotReady: false });
       if (req.method === 'GET' && url.pathname === '/api/demo/accounts') {
         const added = db.prepare("SELECT u.id,u.name,u.role,u.campus FROM courier_applications a JOIN users u ON u.id=a.courier_id WHERE a.status='approved'").all();
         return send(res, 200, [...fixtures.map(([id, name, role, campus]) => ({ id, name, role, campus })), ...added]);
@@ -395,13 +401,25 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         } catch (error) { db.exec('ROLLBACK'); throw error; }
         return send(res, responseStatus, view(responseOrder, user));
       }
-      const orderMatch = url.pathname.match(/^\/api\/orders\/([a-f0-9-]{36})(?:\/(accept|assign|progress|confirm|cancel|exception|resolve))?$/);
+      const orderMatch = url.pathname.match(/^\/api\/orders\/([a-f0-9-]{36})(?:\/(accept|assign|progress|confirm|cancel|exception|resolve|handoff-code))?$/);
       if (orderMatch) {
         const [, id, action] = orderMatch;
         const o = getOrder(id);
         if (!o || !canSee(o, user)) fail(404, '订单不存在');
         if (req.method === 'GET' && !action) return send(res, 200, view(o, user));
         if (req.method !== 'POST' || !action) fail(405, '不支持的操作');
+        if (action === 'handoff-code') {
+          requireRole(user, 'student');
+          if (o.student_id !== user.id) fail(404, '订单不存在');
+          if (o.status !== 'delivering') fail(409, '配送开始后才能生成交接码');
+          if (o.handoff_code_issued_at && sessionClock() - o.handoff_code_issued_at < 30_000) fail(429, '请等待 30 秒后再生成新交接码');
+          const code = String(randomInt(100000, 1000000));
+          const changed = db.prepare("UPDATE orders SET handoff_code_hash=?,handoff_code_issued_at=?,handoff_code_attempts=0 WHERE id=? AND status='delivering' AND student_id=?")
+            .run(handoffCodeHash(id,code),sessionClock(),id,user.id);
+          if (!changed.changes) fail(409, '订单状态已变化，请刷新后重试');
+          audit(user.id, 'demo_handoff_code_issued', id);
+          return send(res, 200, { demoHandoffCode: code, expiresInSeconds: 300, delivery: 'ON_PAGE_ONLY' });
+        }
         if (action === 'exception') {
           const reporterAllowed = (user.role === 'courier' && o.courier_id === user.id && ['assigned', 'picked', 'delivering', 'delivered'].includes(o.status))
             || (user.role === 'student' && o.student_id === user.id && o.status === 'delivered')
@@ -460,10 +478,26 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
         } else if (action === 'progress') {
           requireRole(user, 'courier');
           if (o.courier_id !== user.id || !user.approved) fail(403, '仅本单代取员可更新');
-          const { status } = await bodyOf(req);
+          const { status, handoffCode } = await bodyOf(req);
           const previous = { picked: 'assigned', delivering: 'picked', delivered: 'delivering' }[status];
           if (!previous) fail(400, '状态无效');
-          result = db.prepare('UPDATE orders SET status=?,updated_at=? WHERE id=? AND status=? AND courier_id=?').run(status,now(),id,previous,user.id);
+          if (status === 'delivered') {
+            db.exec('BEGIN IMMEDIATE');
+            try {
+              const current = getOrder(id);
+              if (current.status !== 'delivering' || current.courier_id !== user.id) fail(409, '订单状态已变化，请刷新后重试');
+              if (!current.handoff_code_hash || !current.handoff_code_issued_at || sessionClock() - current.handoff_code_issued_at >= 300_000) fail(409, '请学生重新生成交接码');
+              if (current.handoff_code_attempts >= 5) fail(429, '交接码尝试次数过多，请学生重新生成');
+              if (typeof handoffCode !== 'string' || !/^\d{6}$/.test(handoffCode) || !timingSafeEqual(Buffer.from(current.handoff_code_hash,'hex'),Buffer.from(handoffCodeHash(id,handoffCode),'hex'))) {
+                db.prepare('UPDATE orders SET handoff_code_attempts=handoff_code_attempts+1 WHERE id=?').run(id);
+                db.exec('COMMIT');
+                fail(400, '交接码不正确，请与学生当面核对');
+              }
+              result = db.prepare("UPDATE orders SET status='delivered',handoff_code_hash=NULL,handoff_code_issued_at=NULL,handoff_code_attempts=0,updated_at=? WHERE id=? AND status='delivering' AND courier_id=?").run(now(),id,user.id);
+              if (!result.changes) fail(409, '订单状态已变化，请刷新后重试');
+              db.exec('COMMIT');
+            } catch (error) { if (db.isTransaction) db.exec('ROLLBACK'); throw error; }
+          } else result = db.prepare('UPDATE orders SET status=?,updated_at=? WHERE id=? AND status=? AND courier_id=?').run(status,now(),id,previous,user.id);
           nextAction = `progress_${status}`;
         } else if (action === 'confirm') {
           requireRole(user, 'student');
@@ -532,5 +566,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const { port = 3000, host = '127.0.0.1' } = { port: Number(process.env.PORT || 3000) };
   if (host !== '127.0.0.1') throw Error('本地演示仅允许 127.0.0.1');
   await mkdir(join(root, 'data'), { recursive: true });
-  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.7.1 本地演示：http://${host}:${port}`));
+  createApp().server.listen(port, host, () => console.log(`校园快取通 V0.8.0 本地演示：http://${host}:${port}`));
 }

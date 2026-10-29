@@ -16,6 +16,10 @@
     <view class="field">模拟报价 ¥{{order.amountText}} · 未付款</view>
     <view class="field" wx:if="{{order.handoff}}">楼下当面交接点：{{order.handoff}}</view>
     <view class="field" wx:for="{{order.pickup_codes}}" wx:key="index">第 {{index + 1}} 件虚构取件码：{{item}}</view>
+    <view class="notice" wx:if="{{canIssueHandoff}}">楼下见到代取员并核对包裹后，生成一次性演示交接码，当面告诉对方。5 分钟内有效。</view>
+    <button class="button button-secondary" wx:if="{{canIssueHandoff}}" data-action="handoff-code" disabled="{{busy}}" bindtap="doAction">生成演示交接码</button>
+    <view class="field" wx:if="{{canIssueHandoff && handoffCode}}">本次交接码：{{handoffCode}}（只供当面告知代取员）</view>
+    <view wx:if="{{canProgress && nextStatus === 'delivered'}}"><view class="label">学生当面提供的 6 位交接码</view><input class="control" type="number" maxlength="6" value="{{enteredHandoffCode}}" bindinput="changeHandoffCode" placeholder="请输入交接码" /></view>
     <view class="notice" wx:if="{{order.exception}}">异常已暂停履约：{{order.exceptionReason}}。本校区管理员核实后处理，请刷新查看结果。</view>
     <view class="muted" wx:if="{{order.lastResolution}}">最近一次异常处理：{{order.lastResolutionText}}</view>
     <view class="muted">编号 {{order.shortId}} · {{order.createdText}}</view>

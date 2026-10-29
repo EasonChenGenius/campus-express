@@ -26,6 +26,7 @@ test('已有 V0.4 本机数据库启动时补齐接单字段和异常表', async
   assert.ok(app.db.prepare("SELECT name FROM sqlite_master WHERE name='order_exceptions'").get());
   assert.ok(app.db.prepare("SELECT name FROM sqlite_master WHERE name='slot_limits'").get());
   assert.ok(app.db.prepare('PRAGMA table_info(orders)').all().some(c => c.name === 'building'));
+  assert.ok(app.db.prepare('PRAGMA table_info(orders)').all().some(c => c.name === 'handoff_code_hash'));
 });
 
 test('预约仅开放白天到傍晚的一小时时段，过期和夜间不可提交', async t => {
@@ -289,12 +290,45 @@ test('20 个接单请求只有一次成功，状态流转与审计记录正确',
   assert.equal(accepted.pickup_code, 'TEST-1234');
   assert.equal(accepted.handoff, '东苑东1楼下公共入口（演示位置，待核实）');
   assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status: 'delivered' })).status, 409);
-  for (const status of ['picked', 'delivering', 'delivered']) assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status })).status, 200);
+  for (const status of ['picked', 'delivering']) assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status })).status, 200);
+  assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status: 'delivered' })).status, 409);
+  const issued = await request(`/api/orders/${order.id}/handoff-code`, student, 'POST', {});
+  assert.equal(issued.status, 200);
+  assert.equal(issued.body.delivery, 'ON_PAGE_ONLY');
+  assert.equal((await request(`/api/orders/${order.id}/handoff-code`, courier, 'POST', {})).status, 403);
+  assert.equal(JSON.stringify((await request(`/api/orders/${order.id}`, courier)).body).includes(issued.body.demoHandoffCode), false);
+  assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status: 'delivered', handoffCode: '000000' })).status, 400);
+  assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status: 'delivered', handoffCode: issued.body.demoHandoffCode })).status, 200);
+  assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status: 'delivered', handoffCode: issued.body.demoHandoffCode })).status, 409);
   assert.equal((await request(`/api/orders/${order.id}/confirm`, student, 'POST')).body.status, 'completed');
   assert.equal((await request(`/api/orders/${order.id}/confirm`, student, 'POST')).status, 409);
   const logs = (await request('/api/audit', admin)).body;
-  assert.equal(logs.length, 6);
+  assert.equal(logs.length, 7);
   assert.equal(JSON.stringify(logs).includes('TEST-1234'), false);
+  assert.equal(JSON.stringify(logs).includes(issued.body.demoHandoffCode), false);
+});
+
+test('学生交接码限时限次、只用一次，错误码不会完成交接', async t => {
+  let clock = Date.now();
+  const { request, login, orderBody } = await setup(t, { sessionClock: () => clock });
+  const [student, courier, otherStudent] = await Promise.all(['student-a','runner-cl-1','student-b'].map(login));
+  const order = (await request('/api/orders', student, 'POST', orderBody())).body;
+  assert.equal((await request(`/api/orders/${order.id}/handoff-code`, student, 'POST', {})).status, 409);
+  assert.equal((await request(`/api/orders/${order.id}/accept`, courier, 'POST')).status, 200);
+  for (const status of ['picked','delivering']) assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status })).status, 200);
+  assert.equal((await request(`/api/orders/${order.id}/handoff-code`, otherStudent, 'POST', {})).status, 404);
+  const first = (await request(`/api/orders/${order.id}/handoff-code`, student, 'POST', {})).body.demoHandoffCode;
+  assert.equal((await request(`/api/orders/${order.id}/handoff-code`, student, 'POST', {})).status, 429);
+  assert.equal(JSON.stringify((await request(`/api/orders/${order.id}`, student)).body).includes(first), false);
+  for (let i = 0; i < 5; i++) assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status: 'delivered', handoffCode: '000000' })).status, 400);
+  assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status: 'delivered', handoffCode: first })).status, 429);
+  clock += 30_000;
+  const second = (await request(`/api/orders/${order.id}/handoff-code`, student, 'POST', {})).body.demoHandoffCode;
+  clock += 300_000;
+  assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status: 'delivered', handoffCode: second })).status, 409);
+  const third = (await request(`/api/orders/${order.id}/handoff-code`, student, 'POST', {})).body.demoHandoffCode;
+  assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status: 'delivered', handoffCode: third })).status, 200);
+  assert.equal((await request(`/api/orders/${order.id}/progress`, courier, 'POST', { status: 'delivered', handoffCode: third })).status, 409);
 });
 
 test('跨校区派单和真实数据输入被拒绝，学生可取消待接单', async t => {
@@ -341,8 +375,8 @@ test('相同请求编号只重试同一订单内容，错误响应提供稳定�
   assert.equal(unauthorized.status, 401);
   assert.equal(unauthorized.body.code, 'UNAUTHORIZED');
   const capabilities = await request('/api/capabilities');
-  assert.equal(capabilities.body.version, '0.7.1');
-  assert.equal(capabilities.body.apiContract, 10);
+  assert.equal(capabilities.body.version, '0.8.0');
+  assert.equal(capabilities.body.apiContract, 11);
   assert.equal(capabilities.body.closedPilotReady, false);
 });
 
@@ -379,8 +413,10 @@ test('两个校区完整测试订单流，20 个不同代取员请求只有一�
     request('/api/orders/' + cl.id + '/accept', i % 2 ? courierCL1 : courierCL2, 'POST')));
   assert.equal(results.filter(r => r.status === 200).length, 1);
   const winner = results.find(r => r.status === 200).body.courier_id === 'runner-cl-1' ? courierCL1 : courierCL2;
-  for (const status of ['picked', 'delivering', 'delivered'])
+  for (const status of ['picked', 'delivering'])
     assert.equal((await request('/api/orders/' + cl.id + '/progress', winner, 'POST', { status })).status, 200);
+  const clCode = (await request('/api/orders/' + cl.id + '/handoff-code', studentCL, 'POST', {})).body.demoHandoffCode;
+  assert.equal((await request('/api/orders/' + cl.id + '/progress', winner, 'POST', { status: 'delivered', handoffCode: clCode })).status, 200);
   assert.equal((await request('/api/orders/' + cl.id + '/confirm', studentCL, 'POST')).body.status, 'completed');
 
   const sz = (await request('/api/orders', studentSZ, 'POST', orderBody({
@@ -388,7 +424,9 @@ test('两个校区完整测试订单流，20 个不同代取员请求只有一�
   }))).body;
   assert.equal((await request('/api/orders/' + sz.id, courierCL1)).status, 404);
   assert.equal((await request('/api/orders/' + sz.id + '/accept', courierSZ, 'POST')).status, 200);
-  for (const status of ['picked', 'delivering', 'delivered'])
+  for (const status of ['picked', 'delivering'])
     assert.equal((await request('/api/orders/' + sz.id + '/progress', courierSZ, 'POST', { status })).status, 200);
+  const szCode = (await request('/api/orders/' + sz.id + '/handoff-code', studentSZ, 'POST', {})).body.demoHandoffCode;
+  assert.equal((await request('/api/orders/' + sz.id + '/progress', courierSZ, 'POST', { status: 'delivered', handoffCode: szCode })).status, 200);
   assert.equal((await request('/api/orders/' + sz.id + '/confirm', studentSZ, 'POST')).body.status, 'completed');
 });

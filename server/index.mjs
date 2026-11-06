@@ -185,7 +185,7 @@ export function createApp({ dbPath = join(root, 'data', 'campus-express.sqlite')
     try {
       const url = new URL(req.url, 'http://localhost');
       if (!url.pathname.startsWith('/api/')) {
-        if (req.method !== 'GET' || !['/', '/file-entry.js', '/app.js', '/style.css', '/form.css', '/theme.css', '/pickup-code.js', '/order-request.js', '/assets/sichuan-normal-university-logos.png'].includes(url.pathname)) fail(404, '页面不存在');
+        if (req.method !== 'GET' || !['/', '/file-entry.js', '/app.js', '/style.css', '/form.css', '/theme.css', '/pickup-code.js', '/order-request.js', '/assets/sichuan-normal-university-logos.png', '/assets/xiaodida-logo.png'].includes(url.pathname)) fail(404, '页面不存在');
         const path = join(root, 'web', url.pathname === '/' ? 'index.html' : url.pathname.slice(1));
         const content = await readFile(path);
         res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : url.pathname.endsWith('.css') ? 'text/css; charset=utf-8' : url.pathname.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" });

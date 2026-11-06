@@ -12,7 +12,7 @@ if [[ -z "$node_bin" ]]; then
 fi
 
 current_service="$(curl -fsS --max-time 2 http://127.0.0.1:3000/api/capabilities 2>/dev/null)"
-if [[ "$current_service" == *'"version":"0.6.1"'* && "$current_service" == *LOCAL_DEMO_ONLY* ]]; then
+if [[ "$current_service" == *'"version":"0.8.0"'* && "$current_service" == *LOCAL_DEMO_ONLY* ]]; then
   open http://127.0.0.1:3000/
   echo "校园快取通已在浏览器中打开。"
   exit 0
@@ -28,7 +28,7 @@ echo "正在启动校园快取通本机演示..."
 server_pid=$!
 sleep 1
 
-if [[ "$(curl -fsS --max-time 2 http://127.0.0.1:3000/api/capabilities 2>/dev/null)" != *'"version":"0.6.1"'* ]]; then
+if [[ "$(curl -fsS --max-time 2 http://127.0.0.1:3000/api/capabilities 2>/dev/null)" != *'"version":"0.8.0"'* ]]; then
   echo "启动失败，请确认 3000 端口未被其他程序占用。"
   read -r "reply?按回车键关闭窗口..."
   exit 1

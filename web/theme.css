@@ -117,3 +117,8 @@ button.danger:hover:not(:disabled){background:#fce1e6}
 @media(max-width:850px){.hero-grid{grid-template-columns:minmax(0,1fr) 300px;gap:24px;padding-block:42px}.hero h1{font-size:clamp(42px,6vw,56px)}.flow-card{max-width:none}}
 @media(max-width:600px){.hero-grid{display:block;padding-block:34px 38px}.flow-card{display:none}.hero h1{font-size:42px}.hero-copy>p:not(.hero-kicker){line-height:1.6;margin:14px 0}.hero-cta{margin-top:18px}.role-guide{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.role-card{padding:12px;min-height:94px;gap:5px}.role-card strong{font-size:14px}.role-card small{display:none}.role-icon{width:26px;height:26px}.safety-note{align-items:flex-start}.metric{padding:13px}.metric strong{font-size:27px}.workspace-nav{flex-wrap:nowrap;overflow:auto;padding-bottom:4px}.workspace-nav a{white-space:nowrap}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}button,.button-link,.card{transition:none}}
+
+/* 校递达统一品牌；保留快递业务布局。 */
+.brand-mark{background:#10483b url("./assets/xiaodida-logo.png") center/cover no-repeat!important;border-radius:16px;box-shadow:none}
+
+:root{--ink:#203d33;--muted:#526b60;--primary:#245b48;--primary-deep:#164333;--line:#d4e0d8;--soft:#edf3ee;--mint:#e4f1e9}body{background:#f5f7f2}.hero{background:linear-gradient(112deg,#f0f5ee,#e4f0e9)}.hero-kicker,.eyebrow{color:#386451}button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline-color:#397b60}
